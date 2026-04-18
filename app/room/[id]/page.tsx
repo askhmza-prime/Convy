@@ -44,31 +44,38 @@ export default function RoomPage() {
     fetchMessages()
   }, [])
 
-  return (
-    <main className="min-h-screen p-4 text-white flex flex-col">
-      <h1 className="text-xl font-bold mb-4">Room: {id}</h1>
+return (
+  <main className="h-screen flex flex-col text-white">
 
-      {/* Messages */}
-      <div className="flex-1 border p-3 mb-4 overflow-y-auto">
-        {messages.map((msg) => (
-          <div key={msg.id} className="mb-2">
-            {msg.content}
-          </div>
-        ))}
-      </div>
+    {/* Header */}
+    <div className="p-3 border-b">
+      <h1 className="font-bold">Room: {id}</h1>
+    </div>
 
-      {/* Input */}
-      <div className="flex gap-2">
-        <input
-          value={newMessage}
-          onChange={(e) => setNewMessage(e.target.value)}
-          placeholder="Type message..."
-          className="flex-1 p-2 text-black"
-        />
-        <button onClick={sendMessage} className="bg-white text-black px-4">
-          Send
-        </button>
-      </div>
-    </main>
-  )
-}
+    {/* Messages */}
+    <div className="flex-1 overflow-y-auto p-3">
+      {messages.map((msg) => (
+        <div key={msg.id} className="mb-2">
+          {msg.content}
+        </div>
+      ))}
+    </div>
+
+    {/* Input (always fixed at bottom) */}
+    <div className="p-3 border-t flex gap-2">
+      <input
+        value={newMessage}
+        onChange={(e) => setNewMessage(e.target.value)}
+        placeholder="Type message..."
+        className="flex-1 p-2 text-black"
+      />
+      <button
+        onClick={sendMessage}
+        className="bg-white text-black px-4"
+      >
+        Send
+      </button>
+    </div>
+
+  </main>
+)
