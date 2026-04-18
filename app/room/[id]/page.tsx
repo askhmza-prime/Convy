@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
@@ -9,9 +9,12 @@ export default function RoomPage() {
 
   const [messages, setMessages] = useState<any[]>([])
   const [newMessage, setNewMessage] = useState('')
+  const bottomRef = useRef<HTMLDivElement | null>(null)
 
   // ✅ Fetch messages
   async function fetchMessages() {
+    if (!id) return
+
     const { data, error } = await supabase
       .from('messages')
       .select('*')
@@ -23,82 +26,93 @@ export default function RoomPage() {
 
   // ✅ Send message
   async function sendMessage() {
-    if (!newMessage) return
+    if (!newMessage.trim()) return
 
     const {
       data: { user },
     } = await supabase.auth.getUser()
 
+    if (!user) return
+
     await supabase.from('messages').insert({
       room_id: id,
-      user_id: user?.id,
-      content: newMessage,
+      user_id: user.id,
+      content: newMessage.trim(),
     })
 
     setNewMessage('')
-    fetchMessages()
   }
 
-  // Load messages on start
+  // ✅ Realtime + initial load
   useEffect(() => {
-  if (!id) return   // ✅ wait for id
+    if (!id) return
 
-  fetchMessages()
+    fetchMessages()
 
-  const channel = supabase
-    .channel('room-messages')
-    .on(
-      'postgres_changes',
-      {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'messages',
-        filter: `room_id=eq.${id}`,
-      },
-      (payload) => {
-        setMessages((prev) => [...prev, payload.new])
-      }
-    )
-    .subscribe()
+    const channel = supabase
+      .channel(`room-${id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `room_id=eq.${id}`,
+        },
+        (payload) => {
+          setMessages((prev) => {
+            // جلوگیری duplicates
+            if (prev.find((m) => m.id === payload.new.id)) return prev
+            return [...prev, payload.new]
+          })
+        }
+      )
+      .subscribe()
 
-  return () => {
-    supabase.removeChannel(channel)
-  }
-}, [id])
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [id])
 
-return (
-  <main className="h-screen flex flex-col text-white">
+  // ✅ Auto scroll
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
 
-    {/* Header */}
-    <div className="p-3 border-b">
-      <h1 className="font-bold">Room: {id}</h1>
-    </div>
+  return (
+    <main className="h-screen flex flex-col bg-black text-white">
 
-    {/* Messages */}
-    <div className="flex-1 overflow-y-auto p-3">
-      {messages.map((msg) => (
-        <div key={msg.id} className="mb-2">
-          {msg.content}
-        </div>
-      ))}
-    </div>
+      {/* Header */}
+      <div className="p-3 border-b border-gray-700">
+        <h1 className="font-bold">Room: {id}</h1>
+      </div>
 
-    {/* Input (always fixed at bottom) */}
-    <div className="p-3 border-t flex gap-2">
-      <input
-        value={newMessage}
-        onChange={(e) => setNewMessage(e.target.value)}
-        placeholder="Type message..."
-        className="flex-1 p-2 text-black"
-      />
-      <button
-        onClick={sendMessage}
-        className="bg-white text-black px-4"
-      >
-        Send
-      </button>
-    </div>
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto p-3 space-y-2">
+        {messages.map((msg) => (
+          <div key={msg.id} className="bg-gray-800 p-2 rounded">
+            {msg.content}
+          </div>
+        ))}
+        <div ref={bottomRef} />
+      </div>
 
-  </main>
-    )
+      {/* Input */}
+      <div className="p-3 border-t border-gray-700 flex gap-2">
+        <input
+          value={newMessage}
+          onChange={(e) => setNewMessage(e.target.value)}
+          placeholder="Type message..."
+          className="flex-1 p-2 rounded text-black"
+        />
+        <button
+          onClick={sendMessage}
+          className="bg-white text-black px-4 rounded"
+        >
+          Send
+        </button>
+      </div>
+
+    </main>
+  )
 }
