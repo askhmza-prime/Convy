@@ -18,7 +18,7 @@ export default function RoomPage() {
       .eq('room_id', id)
       .order('created_at', { ascending: true })
 
-    if (!error) setMessages(data)
+    if (!error && data) setMessages(data)
   }
 
   // ✅ Send message
