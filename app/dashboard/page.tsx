@@ -32,7 +32,7 @@ export default function DashboardPage() {
     if (error) {
       alert(error.message)
     } else {
-      alert('Room created: ' + data[0].id)
+      window.location.href = `/room/${data[0].id}`
     }
   }
 
