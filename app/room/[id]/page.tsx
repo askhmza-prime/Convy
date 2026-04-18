@@ -53,7 +53,6 @@ export default function RoomPage() {
         event: 'INSERT',
         schema: 'public',
         table: 'messages',
-        filter: `room_id=eq.${id}`,
       },
       (payload) => {
   alert("REALTIME WORKING")
