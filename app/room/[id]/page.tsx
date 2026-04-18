@@ -8,42 +8,48 @@ export default function RoomPage() {
   const { id } = useParams()
 
   const [messages, setMessages] = useState<any[]>([])
-  const [input, setInput] = useState('')
+  const [newMessage, setNewMessage] = useState('')
 
-  // Fetch messages
-  async function loadMessages() {
-    const { data } = await supabase
+  // ✅ Fetch messages
+  async function fetchMessages() {
+    const { data, error } = await supabase
       .from('messages')
       .select('*')
       .eq('room_id', id)
       .order('created_at', { ascending: true })
 
-    if (data) setMessages(data)
+    if (!error) setMessages(data)
   }
 
-  // Send message
+  // ✅ Send message
   async function sendMessage() {
-    if (!input) return
+    if (!newMessage) return
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
 
     await supabase.from('messages').insert({
       room_id: id,
-      content: input,
+      user_id: user?.id,
+      content: newMessage,
     })
 
-    setInput('')
-    loadMessages()
+    setNewMessage('')
+    fetchMessages()
   }
 
+  // Load messages on start
   useEffect(() => {
-    loadMessages()
+    fetchMessages()
   }, [])
 
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center text-white">
-      
-      <h1 className="text-xl mb-4">Room: {id}</h1>
+    <main className="min-h-screen p-4 text-white flex flex-col">
+      <h1 className="text-xl font-bold mb-4">Room: {id}</h1>
 
-      <div className="w-full max-w-md border border-gray-700 p-4 mb-4 h-64 overflow-y-auto">
+      {/* Messages */}
+      <div className="flex-1 border p-3 mb-4 overflow-y-auto">
         {messages.map((msg) => (
           <div key={msg.id} className="mb-2">
             {msg.content}
@@ -51,18 +57,18 @@ export default function RoomPage() {
         ))}
       </div>
 
+      {/* Input */}
       <div className="flex gap-2">
         <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          className="bg-gray-900 border border-gray-700 px-3 py-2"
+          value={newMessage}
+          onChange={(e) => setNewMessage(e.target.value)}
           placeholder="Type message..."
+          className="flex-1 p-2 text-black"
         />
         <button onClick={sendMessage} className="bg-white text-black px-4">
           Send
         </button>
       </div>
-
     </main>
   )
 }
