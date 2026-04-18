@@ -1,4 +1,5 @@
 'use client'
+// version 2 fix
 
 export const dynamic = 'force-dynamic'
 
