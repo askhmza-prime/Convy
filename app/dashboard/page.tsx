@@ -48,7 +48,7 @@ export default function DashboardPage() {
     if (error || !data) {
       alert('Room not found')
     } else {
-      alert('Joined room: ' + data.id)
+      window.location.href = `/room/${data.id}`
     }
   }
 
