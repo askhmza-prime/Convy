@@ -41,6 +41,8 @@ export default function RoomPage() {
 
   // Load messages on start
   useEffect(() => {
+  if (!id) return
+
   fetchMessages()
 
   const channel = supabase
@@ -62,7 +64,7 @@ export default function RoomPage() {
   return () => {
     supabase.removeChannel(channel)
   }
-}, [])
+}, [id])
 
 return (
   <main className="h-screen flex flex-col text-white">
