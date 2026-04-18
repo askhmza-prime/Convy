@@ -41,8 +41,28 @@ export default function RoomPage() {
 
   // Load messages on start
   useEffect(() => {
-    fetchMessages()
-  }, [])
+  fetchMessages()
+
+  const channel = supabase
+    .channel('room-messages')
+    .on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'messages',
+        filter: `room_id=eq.${id}`,
+      },
+      (payload) => {
+        setMessages((prev) => [...prev, payload.new])
+      }
+    )
+    .subscribe()
+
+  return () => {
+    supabase.removeChannel(channel)
+  }
+}, [])
 
 return (
   <main className="h-screen flex flex-col text-white">
