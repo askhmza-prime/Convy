@@ -56,7 +56,8 @@ export default function RoomPage() {
         filter: `room_id=eq.${id}`,
       },
       (payload) => {
-        setMessages((prev) => [...prev, payload.new])
+  alert("REALTIME WORKING")
+  setMessages((prev) => [...prev, payload.new])
       }
     )
     .subscribe()
