@@ -41,7 +41,7 @@ export default function RoomPage() {
 
   // Load messages on start
   useEffect(() => {
-  if (!id) return
+  if (!id) return   // ✅ wait for id
 
   fetchMessages()
 
@@ -53,10 +53,10 @@ export default function RoomPage() {
         event: 'INSERT',
         schema: 'public',
         table: 'messages',
+        filter: `room_id=eq.${id}`,
       },
       (payload) => {
-  alert("REALTIME WORKING")
-  setMessages((prev) => [...prev, payload.new])
+        setMessages((prev) => [...prev, payload.new])
       }
     )
     .subscribe()
