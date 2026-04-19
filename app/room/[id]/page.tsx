@@ -9,6 +9,7 @@ export default function RoomPage() {
 
   const [messages, setMessages] = useState<any[]>([])
   const [newMessage, setNewMessage] = useState('')
+  const [userId, setUserId] = useState(null)
   const bottomRef = useRef<HTMLDivElement | null>(null)
 
   // ✅ Fetch messages
@@ -89,29 +90,48 @@ export default function RoomPage() {
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-3 space-y-2">
-        {messages.map((msg) => (
-          <div key={msg.id} className="bg-gray-800 p-2 rounded">
-            {msg.content}
-          </div>
-        ))}
-        <div ref={bottomRef} />
+  {messages.map((msg) => {
+    const isMe = msg.user_id === userId
+
+    return (
+      <div
+        key={msg.id}
+        className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}
+      >
+        <div
+          className={`max-w-[70%] p-2 rounded-lg ${
+            isMe
+              ? 'bg-green-500 text-black'
+              : 'bg-gray-800 text-white'
+          }`}
+        >
+          <p>{msg.content}</p>
+
+          <span className="text-xs opacity-60">
+            {new Date(msg.created_at).toLocaleTimeString()}
+          </span>
+        </div>
       </div>
+    )
+  })}
+  <div ref={bottomRef} />
+</div>
 
       {/* Input */}
-      <div className="p-3 border-t border-gray-700 flex gap-2">
-        <input
-          value={newMessage}
-          onChange={(e) => setNewMessage(e.target.value)}
-          placeholder="Type message..."
-          className="flex-1 p-2 rounded text-black"
-        />
-        <button
-          onClick={sendMessage}
-          className="bg-white text-black px-4 rounded"
-        >
-          Send
-        </button>
-      </div>
+      <div className="p-3 border-t border-gray-700 flex gap-2 bg-black">
+  <input
+    value={newMessage}
+    onChange={(e) => setNewMessage(e.target.value)}
+    placeholder="Type message..."
+    className="flex-1 p-3 rounded-full text-black outline-none"
+  />
+  <button
+    onClick={sendMessage}
+    className="bg-green-500 px-5 rounded-full"
+  >
+    ➤
+  </button>
+</div>
 
     </main>
   )
