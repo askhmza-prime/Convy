@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
@@ -9,10 +9,18 @@ export default function RoomPage() {
 
   const [messages, setMessages] = useState<any[]>([])
   const [newMessage, setNewMessage] = useState('')
-  const [userId, setUserId] = useState(null)
-  const bottomRef = useRef<HTMLDivElement | null>(null)
+  const [userId, setUserId] = useState<string | null>(null)
 
-  // ✅ Fetch messages
+  // ✅ Get current user
+  async function getUser() {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    setUserId(user?.id || null)
+  }
+
+  // ✅ Fetch old messages
   async function fetchMessages() {
     if (!id) return
 
@@ -27,45 +35,41 @@ export default function RoomPage() {
 
   // ✅ Send message
   async function sendMessage() {
-    if (!newMessage.trim()) return
+    if (!newMessage) return
 
     const {
       data: { user },
     } = await supabase.auth.getUser()
 
-    if (!user) return
-
     await supabase.from('messages').insert({
       room_id: id,
-      user_id: user.id,
-      content: newMessage.trim(),
+      user_id: user?.id,
+      content: newMessage,
     })
 
     setNewMessage('')
+    // ❌ NO fetchMessages here (realtime handles it)
   }
 
-  // ✅ Realtime + initial load
+  // ✅ Load + Realtime
   useEffect(() => {
     if (!id) return
 
+    getUser()
     fetchMessages()
 
     const channel = supabase
-      .channel(`room-${id}`)
+      .channel('room-messages')
       .on(
         'postgres_changes',
         {
           event: 'INSERT',
           schema: 'public',
           table: 'messages',
-          filter: `room_id=eq.${id}`,
+          filter: `room_id=eq.${id}`, // 🔥 IMPORTANT FIX
         },
         (payload) => {
-          setMessages((prev) => {
-            // جلوگیری duplicates
-            if (prev.find((m) => m.id === payload.new.id)) return prev
-            return [...prev, payload.new]
-          })
+          setMessages((prev) => [...prev, payload.new])
         }
       )
       .subscribe()
@@ -75,13 +79,8 @@ export default function RoomPage() {
     }
   }, [id])
 
-  // ✅ Auto scroll
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
-
   return (
-    <main className="h-screen flex flex-col bg-black text-white">
+    <main className="h-screen flex flex-col text-white bg-black">
 
       {/* Header */}
       <div className="p-3 border-b border-gray-700">
@@ -90,49 +89,51 @@ export default function RoomPage() {
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-3 space-y-2">
-  {messages.map((msg) => {
-    const isMe = msg.user_id === userId
+        {messages.map((msg) => {
+          const isMe = msg.user_id === userId
 
-    return (
-      <div
-        key={msg.id}
-        className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}
-      >
-        <div
-          className={`max-w-[70%] p-2 rounded-lg ${
-            isMe
-              ? 'bg-green-500 text-black'
-              : 'bg-gray-800 text-white'
-          }`}
-        >
-          <p>{msg.content}</p>
+          return (
+            <div
+              key={msg.id}
+              className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}
+            >
+              <div
+                className={`max-w-[70%] p-2 rounded-lg ${
+                  isMe
+                    ? 'bg-green-500 text-black'
+                    : 'bg-gray-800 text-white'
+                }`}
+              >
+                <p>{msg.content}</p>
 
-          <span className="text-xs opacity-60">
-            {new Date(msg.created_at).toLocaleTimeString()}
-          </span>
-        </div>
+                <span className="text-xs opacity-60">
+                  {new Date(msg.created_at).toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </span>
+              </div>
+            </div>
+          )
+        })}
       </div>
-    )
-  })}
-  <div ref={bottomRef} />
-</div>
 
       {/* Input */}
       <div className="p-3 border-t border-gray-700 flex gap-2 bg-black">
-  <input
-    value={newMessage}
-    onChange={(e) => setNewMessage(e.target.value)}
-    placeholder="Type message..."
-    className="flex-1 p-3 rounded-full text-black outline-none"
-  />
-  <button
-    onClick={sendMessage}
-    className="bg-green-500 px-5 rounded-full"
-  >
-    ➤
-  </button>
-</div>
+        <input
+          value={newMessage}
+          onChange={(e) => setNewMessage(e.target.value)}
+          placeholder="Type message..."
+          className="flex-1 p-3 rounded-full text-black outline-none"
+        />
+        <button
+          onClick={sendMessage}
+          className="bg-green-500 px-5 rounded-full"
+        >
+          ➤
+        </button>
+      </div>
 
     </main>
   )
-}
+        }
