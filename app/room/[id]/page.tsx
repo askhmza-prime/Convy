@@ -77,7 +77,7 @@ export default function RoomPage() {
     fetchMessages()
 
     const channel = supabase
-      .channel('room-messages')
+      .channel(`room-${id}`)
       .on(
         'postgres_changes',
         {
@@ -95,7 +95,9 @@ export default function RoomPage() {
           })
         }
       )
-      .subscribe()
+      .subscribe((status) => {
+  console.log('REALTIME STATUS:', status)
+})
 
     return () => {
       supabase.removeChannel(channel)
