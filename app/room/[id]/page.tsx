@@ -119,6 +119,17 @@ const tempMessage = {
     }
   }, [roomId])
 
+  // ✅ Fallback sync (safety net if realtime fails)
+useEffect(() => {
+  if (!roomId) return
+
+  const interval = setInterval(() => {
+    fetchMessages()
+  }, 2000)
+
+  return () => clearInterval(interval)
+}, [roomId])
+
   return (
     <main className="h-screen flex flex-col bg-[#0a0a0a] text-white">
 
