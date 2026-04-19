@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 
 export default function RoomPage() {
   const { id } = useParams()
+  const roomId = Array.isArray(id) ? id[0] : id
 
   const [messages, setMessages] = useState<any[]>([])
   const [newMessage, setNewMessage] = useState('')
@@ -26,7 +27,7 @@ export default function RoomPage() {
     const { data, error } = await supabase
       .from('messages')
       .select('*')
-      .eq('room_id', id)
+      .eq('room_id', roomId)
       .order('created_at', { ascending: true })
     if (!error && data) setMessages(data)
   }
@@ -53,7 +54,7 @@ export default function RoomPage() {
   setNewMessage('')
 
   await supabase.from('messages').insert({
-    room_id: id,
+    room_id: roomId,
     user_id: user?.id,
     content: messageText,
   })
@@ -77,14 +78,14 @@ export default function RoomPage() {
     fetchMessages()
 
     const channel = supabase
-      .channel(`room-${id}`)
+      .channel('messages-realtime')
       .on(
         'postgres_changes',
         {
           event: 'INSERT',
           schema: 'public',
           table: 'messages',
-          filter: `room_id=eq.${id}`,
+          // no filter
         },
         (payload) => {
           // FIX 2 — Prevent duplicates
@@ -102,7 +103,7 @@ export default function RoomPage() {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [id])
+  }, [roomId])
 
   return (
     <main className="h-screen flex flex-col bg-[#0a0a0a] text-white">
