@@ -42,13 +42,16 @@ export default function RoomPage() {
     data: { user },
   } = await supabase.auth.getUser()
 
-  const tempMessage = {
-    id: crypto.randomUUID(),
-    room_id: id,
-    user_id: user?.id,
-    content: messageText,
-    created_at: new Date().toISOString(),
-  }
+  const tempId = `temp-${Date.now()}`
+
+const tempMessage = {
+  id: tempId,
+  room_id: roomId,
+  user_id: user?.id,
+  content: messageText,
+  created_at: new Date().toISOString(),
+  isTemp: true,
+}
 
   setMessages((prev) => [...prev, tempMessage])
   setNewMessage('')
