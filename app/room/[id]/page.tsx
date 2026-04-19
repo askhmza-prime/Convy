@@ -85,7 +85,7 @@ export default function RoomPage() {
           event: 'INSERT',
           schema: 'public',
           table: 'messages',
-          // no filter
+          filter: `room_id=eq.${roomId}`,
         },
         (payload) => {
           // FIX 2 — Prevent duplicates
