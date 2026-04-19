@@ -81,27 +81,38 @@ const tempMessage = {
     fetchMessages()
 
     const channel = supabase
-      .channel('messages-realtime')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages',
-          filter: `room_id=eq.${roomId}`,
-        },
-        (payload) => {
-          // FIX 2 — Prevent duplicates
-          setMessages((prev) => {
-            const exists = prev.some((msg) => msg.id === payload.new.id)
-            if (exists) return prev
-            return [...prev, payload.new]
-          })
-        }
-      )
-      .subscribe((status) => {
-  console.log('REALTIME STATUS:', status)
-})
+  .channel('messages-realtime')
+  .on(
+    'postgres_changes',
+    {
+      event: 'INSERT',
+      schema: 'public',
+      table: 'messages',
+      filter: `room_id=eq.${roomId}`,
+    },
+    (payload) => {
+      setMessages((prev) => {
+        // 🔥 remove matching temp message
+        const filtered = prev.filter(
+          (msg) =>
+            !(
+              msg.isTemp &&
+              msg.content === payload.new.content &&
+              msg.user_id === payload.new.user_id
+            )
+        )
+
+        // 🔥 prevent duplicate real messages
+        const exists = filtered.some((msg) => msg.id === payload.new.id)
+        if (exists) return filtered
+
+        return [...filtered, payload.new]
+      })
+    }
+  )
+  .subscribe((status) => {
+    console.log('REALTIME STATUS:', status)
+  })
 
     return () => {
       supabase.removeChannel(channel)
