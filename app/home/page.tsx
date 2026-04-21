@@ -8,7 +8,7 @@ export default function HomePage() {
   const [rooms, setRooms] = useState<any[]>([])
   const router = useRouter()
 
-  // 🔥 Fetch rooms + last message
+  // 🔥 Fetch rooms
   async function fetchRooms() {
     const { data: roomsData } = await supabase
       .from('rooms')
@@ -52,21 +52,35 @@ export default function HomePage() {
     fetchRooms()
   }, [])
 
-  // 🔥 Create new room
+  // 🔥 Create room
   async function createRoom() {
     const roomName = prompt('Enter room name')
-
     if (!roomName) return
 
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('rooms')
       .insert({ name: roomName })
       .select()
       .single()
 
-    if (!error && data) {
+    if (data) {
       router.push(`/room/${data.id}`)
     }
+  }
+
+  // 🔥 Join room
+  function joinRoom() {
+    const roomId = prompt('Enter Room Code / ID')
+    if (!roomId) return
+
+    router.push(`/room/${roomId}`)
+  }
+
+  // 🔥 Copy invite link
+  function copyInvite(roomId: string) {
+    const link = `${window.location.origin}/room/${roomId}`
+    navigator.clipboard.writeText(link)
+    alert('Invite link copied!')
   }
 
   return (
@@ -76,12 +90,21 @@ export default function HomePage() {
       <div className="p-4 border-b border-white/5 flex justify-between items-center">
         <h1 className="text-xl font-semibold">Chats</h1>
 
-        <button
-          onClick={createRoom}
-          className="bg-white text-black px-3 py-1 rounded text-sm"
-        >
-          + New
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={joinRoom}
+            className="bg-[#222] px-3 py-1 rounded text-sm"
+          >
+            Join
+          </button>
+
+          <button
+            onClick={createRoom}
+            className="bg-white text-black px-3 py-1 rounded text-sm"
+          >
+            + New
+          </button>
+        </div>
       </div>
 
       {/* Chat List */}
@@ -95,21 +118,34 @@ export default function HomePage() {
           return (
             <div
               key={room.id}
-              onClick={() => router.push(`/room/${room.id}`)}
-              className="flex items-center justify-between px-4 py-3 border-b border-white/5 bg-[#111] cursor-pointer active:scale-[0.98]"
+              className="flex items-center justify-between px-4 py-3 border-b border-white/5 bg-[#111]"
             >
-              <div className="flex flex-col">
+              {/* Left side */}
+              <div
+                onClick={() => router.push(`/room/${room.id}`)}
+                className="flex flex-col cursor-pointer"
+              >
                 <p className="text-sm font-semibold">
                   {room.name || 'Room'}
                 </p>
-                <p className="text-xs text-gray-400 truncate max-w-[220px]">
+                <p className="text-xs text-gray-400 truncate max-w-[200px]">
                   {room.lastMessage}
                 </p>
               </div>
 
-              <span className="text-[10px] text-gray-500">
-                {time}
-              </span>
+              {/* Right side */}
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-gray-500">
+                  {time}
+                </span>
+
+                <button
+                  onClick={() => copyInvite(room.id)}
+                  className="text-xs bg-[#222] px-2 py-1 rounded"
+                >
+                  🔗
+                </button>
+              </div>
             </div>
           )
         })}
