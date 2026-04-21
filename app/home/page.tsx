@@ -8,22 +8,14 @@ export default function HomePage() {
   const [rooms, setRooms] = useState<any[]>([])
   const router = useRouter()
 
-  // 🔥 Fetch rooms
   async function fetchRooms() {
-    const { data: roomsData } = await supabase
-      .from('rooms')
-      .select('*')
-
-    const { data: messages } = await supabase
-      .from('messages')
-      .select('*')
+    const { data: roomsData } = await supabase.from('rooms').select('*')
+    const { data: messages } = await supabase.from('messages').select('*')
 
     if (!roomsData) return
 
     const formatted = roomsData.map((room: any) => {
-      const roomMsgs = messages?.filter(
-        (m: any) => m.room_id === room.id
-      )
+      const roomMsgs = messages?.filter((m: any) => m.room_id === room.id)
 
       const lastMsg = roomMsgs?.sort(
         (a: any, b: any) =>
@@ -52,7 +44,6 @@ export default function HomePage() {
     fetchRooms()
   }, [])
 
-  // 🔥 Create room
   async function createRoom() {
     const roomName = prompt('Enter room name')
     if (!roomName) return
@@ -68,15 +59,34 @@ export default function HomePage() {
     }
   }
 
-  // 🔥 Join room
-  function joinRoom() {
-    const roomId = prompt('Enter Room Code / ID')
-    if (!roomId) return
+  // 🔥 FIXED JOIN
+  async function joinRoom() {
+    let input = prompt('Paste invite link or room code')
 
-    router.push(`/room/${roomId}`)
+    if (!input) return
+
+    input = input.trim()
+
+    // Extract ID if full URL pasted
+    if (input.includes('/room/')) {
+      input = input.split('/room/')[1]
+    }
+
+    // Validate room exists
+    const { data, error } = await supabase
+      .from('rooms')
+      .select('id')
+      .eq('id', input)
+      .single()
+
+    if (error || !data) {
+      alert('Room not found ❌')
+      return
+    }
+
+    router.push(`/room/${input}`)
   }
 
-  // 🔥 Copy invite link
   function copyInvite(roomId: string) {
     const link = `${window.location.origin}/room/${roomId}`
     navigator.clipboard.writeText(link)
@@ -86,7 +96,6 @@ export default function HomePage() {
   return (
     <main className="h-screen bg-[#0a0a0a] text-white">
 
-      {/* Header */}
       <div className="p-4 border-b border-white/5 flex justify-between items-center">
         <h1 className="text-xl font-semibold">Chats</h1>
 
@@ -107,7 +116,6 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* Chat List */}
       <div className="flex flex-col">
         {rooms.map((room) => {
           const time = new Date(room.lastTime).toLocaleTimeString('en-IN', {
@@ -120,7 +128,6 @@ export default function HomePage() {
               key={room.id}
               className="flex items-center justify-between px-4 py-3 border-b border-white/5 bg-[#111]"
             >
-              {/* Left side */}
               <div
                 onClick={() => router.push(`/room/${room.id}`)}
                 className="flex flex-col cursor-pointer"
@@ -133,7 +140,6 @@ export default function HomePage() {
                 </p>
               </div>
 
-              {/* Right side */}
               <div className="flex items-center gap-2">
                 <span className="text-[10px] text-gray-500">
                   {time}
