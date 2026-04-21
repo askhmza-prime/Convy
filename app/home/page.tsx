@@ -6,60 +6,43 @@ import { useRouter } from 'next/navigation'
 
 export default function HomePage() {
   const [rooms, setRooms] = useState<any[]>([])
-  const [userMap, setUserMap] = useState<any>({})
   const router = useRouter()
 
-  // 🔥 Ensure username exists
-  async function ensureUsername() {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  // 🔐 Check if user has username
+  async function checkUser() {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
 
-  if (!user) return
+    if (!user) return
 
-  const { data } = await supabase
-    .from('profiles')
-    .select('username')
-    .eq('id', user.id)
-    .maybeSingle()
-
-  // 🔥 FIX: check BOTH cases
-  if (!data || !data.username) {
-    const username = prompt('Choose your username')
-
-    if (!username) return
-
-    await supabase.from('profiles').upsert({
-      id: user.id,
-      username,
-    })
-  }
-  }
-
-  // 🔥 Fetch usernames
-  async function fetchUsers() {
     const { data } = await supabase
       .from('profiles')
-      .select('*')
+      .select('username')
+      .eq('id', user.id)
+      .maybeSingle()
 
-    const map: any = {}
-
-    data?.forEach((user: any) => {
-      map[user.id] = user.username
-    })
-
-    setUserMap(map)
+    if (!data || !data.username) {
+      router.push('/profile')
+    }
   }
 
-  // 🔥 Fetch rooms + messages
+  // 🔥 Fetch rooms
   async function fetchRooms() {
-    const { data: roomsData } = await supabase.from('rooms').select('*')
-    const { data: messages } = await supabase.from('messages').select('*')
+    const { data: roomsData } = await supabase
+      .from('rooms')
+      .select('*')
+
+    const { data: messages } = await supabase
+      .from('messages')
+      .select('*')
 
     if (!roomsData) return
 
     const formatted = roomsData.map((room: any) => {
-      const roomMsgs = messages?.filter((m: any) => m.room_id === room.id)
+      const roomMsgs = messages?.filter(
+        (m: any) => m.room_id === room.id
+      )
 
       const lastMsg = roomMsgs?.sort(
         (a: any, b: any) =>
@@ -67,16 +50,10 @@ export default function HomePage() {
           new Date(a.created_at).getTime()
       )[0]
 
-      const senderName = lastMsg
-        ? userMap[lastMsg.user_id] || 'User'
-        : ''
-
       return {
         id: room.id,
         name: room.name,
-        lastMessage: lastMsg
-          ? `${senderName}: ${lastMsg.content}`
-          : 'No messages yet',
+        lastMessage: lastMsg?.content || 'No messages yet',
         lastTime: lastMsg?.created_at || room.created_at,
       }
     })
@@ -90,17 +67,10 @@ export default function HomePage() {
     setRooms(formatted)
   }
 
-  // 🔥 Run on load
   useEffect(() => {
-    ensureUsername()
-    fetchUsers()
+    checkUser()
+    fetchRooms()
   }, [])
-
-  useEffect(() => {
-    if (Object.keys(userMap).length > 0) {
-      fetchRooms()
-    }
-  }, [userMap])
 
   // 🔥 Create room
   async function createRoom() {
@@ -118,32 +88,26 @@ export default function HomePage() {
     }
   }
 
-  // 🔥 Join room
-  async function joinRoom() {
-    let input = prompt('Paste invite link or room code')
+  // 🔥 Join room (FIXED)
+  function joinRoom() {
+    let input = prompt('Paste invite link OR room ID')
     if (!input) return
 
-    input = input.trim()
-
+    // if full link pasted → extract ID
     if (input.includes('/room/')) {
       input = input.split('/room/')[1]
     }
 
-    const { data, error } = await supabase
-      .from('rooms')
-      .select('id')
-      .eq('id', input)
-      .single()
-
-    if (error || !data) {
-      alert('Room not found ❌')
+    // basic validation
+    if (input.length < 10) {
+      alert('Invalid Room ID')
       return
     }
 
     router.push(`/room/${input}`)
   }
 
-  // 🔥 Copy invite
+  // 🔥 Copy invite link
   function copyInvite(roomId: string) {
     const link = `${window.location.origin}/room/${roomId}`
     navigator.clipboard.writeText(link)
@@ -187,6 +151,7 @@ export default function HomePage() {
               key={room.id}
               className="flex items-center justify-between px-4 py-3 border-b border-white/5 bg-[#111]"
             >
+              {/* Left */}
               <div
                 onClick={() => router.push(`/room/${room.id}`)}
                 className="flex flex-col cursor-pointer"
@@ -199,6 +164,7 @@ export default function HomePage() {
                 </p>
               </div>
 
+              {/* Right */}
               <div className="flex items-center gap-2">
                 <span className="text-[10px] text-gray-500">
                   {time}
