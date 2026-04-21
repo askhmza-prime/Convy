@@ -6,8 +6,19 @@ import { useRouter } from 'next/navigation'
 
 export default function HomePage() {
   const [rooms, setRooms] = useState<any[]>([])
+  const [userId, setUserId] = useState<string | null>(null)
   const router = useRouter()
 
+  // 🔥 Get current user
+  async function getUser() {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    setUserId(user?.id || null)
+  }
+
+  // 🔥 Fetch rooms
   async function fetchRooms() {
     const { data: roomsData } = await supabase.from('rooms').select('*')
     const { data: messages } = await supabase.from('messages').select('*')
@@ -23,10 +34,14 @@ export default function HomePage() {
           new Date(a.created_at).getTime()
       )[0]
 
+      const isMe = lastMsg?.user_id === userId
+
       return {
         id: room.id,
         name: room.name,
-        lastMessage: lastMsg?.content || 'No messages yet',
+        lastMessage: lastMsg
+          ? `${isMe ? 'You' : 'Other'}: ${lastMsg.content}`
+          : 'No messages yet',
         lastTime: lastMsg?.created_at || room.created_at,
       }
     })
@@ -41,9 +56,16 @@ export default function HomePage() {
   }
 
   useEffect(() => {
-    fetchRooms()
+    getUser()
   }, [])
 
+  useEffect(() => {
+    if (userId !== null) {
+      fetchRooms()
+    }
+  }, [userId])
+
+  // 🔥 Create room
   async function createRoom() {
     const roomName = prompt('Enter room name')
     if (!roomName) return
@@ -59,20 +81,17 @@ export default function HomePage() {
     }
   }
 
-  // 🔥 FIXED JOIN
+  // 🔥 Join room
   async function joinRoom() {
     let input = prompt('Paste invite link or room code')
-
     if (!input) return
 
     input = input.trim()
 
-    // Extract ID if full URL pasted
     if (input.includes('/room/')) {
       input = input.split('/room/')[1]
     }
 
-    // Validate room exists
     const { data, error } = await supabase
       .from('rooms')
       .select('id')
