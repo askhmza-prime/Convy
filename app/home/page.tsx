@@ -8,6 +8,7 @@ export default function HomePage() {
   const [rooms, setRooms] = useState<any[]>([])
   const router = useRouter()
 
+  // 🔥 Fetch rooms + last messages
   async function fetchRooms() {
     const { data: roomsData } = await supabase
       .from('rooms')
@@ -47,6 +48,23 @@ export default function HomePage() {
     setRooms(formatted)
   }
 
+  // 🔥 Create room
+  async function createRoom() {
+    const roomName = prompt('Enter room name')
+
+    if (!roomName) return
+
+    const { data, error } = await supabase
+      .from('rooms')
+      .insert({ name: roomName })
+      .select()
+      .single()
+
+    if (!error && data) {
+      router.push(`/room/${data.id}`)
+    }
+  }
+
   useEffect(() => {
     fetchRooms()
   }, [])
@@ -55,8 +73,15 @@ export default function HomePage() {
     <main className="h-screen bg-[#0a0a0a] text-white">
 
       {/* Header */}
-      <div className="p-4 border-b border-white/5">
+      <div className="p-4 border-b border-white/5 flex justify-between items-center">
         <h1 className="text-xl font-semibold">Chats</h1>
+
+        <button
+          onClick={createRoom}
+          className="bg-white text-black px-3 py-1 rounded text-sm"
+        >
+          + New
+        </button>
       </div>
 
       {/* Chat List */}
@@ -75,8 +100,9 @@ export default function HomePage() {
             >
               <div className="flex flex-col">
                 <p className="text-sm font-semibold">
-  {room.name || 'Room'}
-</p>
+                  {room.name || 'Room'}
+                </p>
+
                 <p className="text-xs text-gray-400 truncate max-w-[220px]">
                   {room.lastMessage}
                 </p>
