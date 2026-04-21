@@ -1,234 +1,141 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
 export default function RoomPage() {
   const { id } = useParams()
-  const roomId = Array.isArray(id) ? id[0] : id
 
   const [messages, setMessages] = useState<any[]>([])
-  const [newMessage, setNewMessage] = useState('')
+  const [input, setInput] = useState('')
   const [userId, setUserId] = useState<string | null>(null)
-  const bottomRef = useRef<HTMLDivElement>(null)
+  const [userMap, setUserMap] = useState<any>({})
 
-  // ✅ Get current user
+  // 🔐 Get current user
   async function getUser() {
     const {
       data: { user },
     } = await supabase.auth.getUser()
-    setUserId(user?.id || null)
+
+    if (user) setUserId(user.id)
   }
 
-  // ✅ Fetch old messages
+  // 🔥 Fetch messages
   async function fetchMessages() {
-    if (!id) return
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('messages')
       .select('*')
-      .eq('room_id', roomId)
+      .eq('room_id', id)
       .order('created_at', { ascending: true })
-    if (!error && data) setMessages(data)
+
+    if (data) setMessages(data)
   }
 
-  // ✅ Send message — FIX 1: Instant UI update
-  async function sendMessage() {
-  if (!newMessage.trim()) return
+  // 🔥 Fetch usernames
+  async function fetchUsers() {
+    const { data } = await supabase
+      .from('profiles')
+      .select('id, username')
 
-  const messageText = newMessage.trim()   // ✅ lock value
+    if (!data) return
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  const tempId = `temp-${Date.now()}`
-
-const tempMessage = {
-  id: tempId,
-  room_id: roomId,
-  user_id: user?.id,
-  content: messageText,
-  created_at: new Date().toISOString(),
-  isTemp: true,
-}
-
-  setMessages((prev) => [...prev, tempMessage])
-  setNewMessage('')
-
-  await supabase.from('messages').insert({
-    room_id: roomId,
-    user_id: user?.id,
-    content: messageText,
-  })
-  }
-
-  // ✅ Handle Enter key
-  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === 'Enter') sendMessage()
-  }
-
-  // ✅ Auto scroll to bottom
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
-
-  // ✅ Load + Realtime
-  useEffect(() => {
-    if (!id) return
-
-    getUser()
-    fetchMessages()
-
-    const channel = supabase
-  .channel('messages-realtime')
-  .on(
-    'postgres_changes',
-    {
-      event: 'INSERT',
-      schema: 'public',
-      table: 'messages',
-      filter: `room_id=eq.${roomId}`,
-    },
-    (payload) => {
-  setMessages((prev) => {
-    let foundTemp = false
-
-    const updated = prev.map((msg) => {
-      if (
-        msg.isTemp &&
-        msg.content === payload.new.content &&
-        msg.user_id === payload.new.user_id
-      ) {
-        foundTemp = true
-        return payload.new
-      }
-      return msg
+    const map: any = {}
+    data.forEach((u: any) => {
+      map[u.id] = u.username
     })
 
-    // ✅ if temp found → replace only
-    if (foundTemp) return updated
+    setUserMap(map)
+  }
 
-    // ✅ if no temp → add normally (for receiver)
-    const exists = prev.some((msg) => msg.id === payload.new.id)
-    if (exists) return prev
+  // 🔥 Send message
+  async function sendMessage() {
+    if (!input.trim()) return
 
-    return [...prev, payload.new]
-  })
-    }
-  )
-  .subscribe((status) => {
-    console.log('REALTIME STATUS:', status)
-  })
+    await supabase.from('messages').insert({
+      room_id: id,
+      content: input,
+      user_id: userId,
+    })
+
+    setInput('')
+    fetchMessages()
+  }
+
+  useEffect(() => {
+    getUser()
+    fetchMessages()
+    fetchUsers()
+
+    const channel = supabase
+      .channel('realtime-room')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'messages',
+          filter: `room_id=eq.${id}`,
+        },
+        () => fetchMessages()
+      )
+      .subscribe()
 
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [roomId])
-
-  // ✅ Fallback sync (safety net if realtime fails)
-useEffect(() => {
-  if (!roomId) return
-
-  const interval = setInterval(() => {
-    fetchMessages()
-  }, 2000)
-
-  return () => clearInterval(interval)
-}, [roomId])
+  }, [])
 
   return (
-    <main className="h-screen flex flex-col bg-[#0a0a0a] text-white">
+    <main className="h-screen flex flex-col bg-black text-white">
 
       {/* Header */}
-      <div className="flex items-center gap-3 px-5 py-4 bg-[#111111] border-b border-white/5 shadow-sm">
-        <div className="w-9 h-9 rounded-full bg-indigo-600 flex items-center justify-center text-sm font-bold">
-          #
-        </div>
-        <div>
-          <p className="text-sm font-semibold text-white leading-none">Room</p>
-          <p className="text-xs text-gray-500 mt-0.5 truncate max-w-[200px]">{id}</p>
-        </div>
+      <div className="p-4 border-b border-white/5">
+        <h1 className="text-lg font-semibold">Room</h1>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-5 space-y-2">
-        {messages.length === 0 && (
-          <div className="flex items-center justify-center h-full">
-            <p className="text-gray-600 text-sm">No messages yet. Say hello 👋</p>
-          </div>
-        )}
-
-        {messages.map((msg, index) => {
+      <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
+        {messages.map((msg) => {
           const isMe = msg.user_id === userId
-
-          // FIX 3 — Correct time format
-          const time = new Date(msg.created_at).toLocaleTimeString('en-IN', {
-            hour: '2-digit',
-            minute: '2-digit',
-          })
-
-          const prevMsg = messages[index - 1]
-          const isSameUser = prevMsg && prevMsg.user_id === msg.user_id
-          const topSpacing = isSameUser ? 'mt-0.5' : 'mt-3'
+          const username = userMap[msg.user_id] || 'Unknown'
 
           return (
             <div
               key={msg.id}
-              className={`flex ${isMe ? 'justify-end' : 'justify-start'} ${topSpacing}`}
+              className={`max-w-[70%] p-3 rounded ${
+                isMe
+                  ? 'bg-white text-black self-end'
+                  : 'bg-[#111] self-start'
+              }`}
             >
-              <div
-                className={`
-                  relative max-w-[72%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed
-                  transition-all duration-200
-                  ${isMe
-                    ? 'bg-indigo-600 text-white rounded-br-sm'
-                    : 'bg-[#1e1e1e] text-gray-100 rounded-bl-sm border border-white/5'
-                  }
-                `}
-              >
-                <p className="break-words">{msg.content}</p>
-                <span
-                  className={`block text-[10px] mt-1 text-right ${
-                    isMe ? 'text-indigo-200' : 'text-gray-500'
-                  }`}
-                >
-                  {time}
-                </span>
-              </div>
+              {/* 👤 Username */}
+              <p className="text-[10px] opacity-60 mb-1">
+                {isMe ? 'You' : username}
+              </p>
+
+              {/* 💬 Message */}
+              <p className="text-sm">{msg.content}</p>
             </div>
           )
         })}
-
-        {/* Auto scroll anchor */}
-        <div ref={bottomRef} />
       </div>
 
-      {/* Input Bar */}
-      <div className="px-4 py-3 bg-[#111111] border-t border-white/5">
-        <div className="flex items-center gap-2 bg-[#1a1a1a] border border-white/10 rounded-full px-4 py-2">
-          <input
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Type a message..."
-            className="flex-1 bg-transparent text-sm text-white placeholder-gray-500 outline-none"
-          />
-          <button
-            onClick={sendMessage}
-            disabled={!newMessage.trim()}
-            className="w-8 h-8 flex items-center justify-center rounded-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150 flex-shrink-0"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              fill="currentColor"
-              className="w-4 h-4 rotate-90"
-            >
-              <path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" />
-            </svg>
-          </button>
-        </div>
+      {/* Input */}
+      <div className="p-3 border-t border-white/5 flex gap-2">
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder="Type message..."
+          className="flex-1 bg-[#111] p-2 rounded outline-none"
+        />
+
+        <button
+          onClick={sendMessage}
+          className="bg-white text-black px-4 rounded"
+        >
+          Send
+        </button>
       </div>
 
     </main>
