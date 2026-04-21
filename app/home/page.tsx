@@ -8,67 +8,42 @@ export default function HomePage() {
   const [rooms, setRooms] = useState<any[]>([])
   const router = useRouter()
 
-  // 🔥 Fetch rooms with last message
   async function fetchRooms() {
-  const { data: rooms, error } = await supabase
-    .from('rooms')
-    .select('*')
+    const { data: roomsData } = await supabase
+      .from('rooms')
+      .select('*')
 
-  if (!rooms) return
+    const { data: messages } = await supabase
+      .from('messages')
+      .select('*')
 
-  const { data: messages } = await supabase
-    .from('messages')
-    .select('*')
+    if (!roomsData) return
 
-  const formatted = rooms.map((room: any) => {
-    const roomMsgs = messages?.filter(
-      (m: any) => m.room_id === room.id
-    )
-
-    const lastMsg = roomMsgs?.sort(
-      (a: any, b: any) =>
-        new Date(b.created_at).getTime() -
-        new Date(a.created_at).getTime()
-    )[0]
-
-    return {
-      id: room.id,
-      lastMessage: lastMsg?.content || 'No messages yet',
-      lastTime: lastMsg?.created_at || room.created_at,
-    }
-  })
-
-  formatted.sort(
-    (a: any, b: any) =>
-      new Date(b.lastTime).getTime() -
-      new Date(a.lastTime).getTime()
-  )
-
-  setRooms(formatted)
-  }
-
-    if (!error && data) {
-      const formatted = data.map((room: any) => {
-        const lastMsg = room.messages?.sort(
-          (a: any, b: any) =>
-            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        )[0]
-
-        return {
-          id: room.id,
-          lastMessage: lastMsg?.content || 'No messages yet',
-          lastTime: lastMsg?.created_at || room.created_at,
-        }
-      })
-
-      // sort latest chats on top
-      formatted.sort(
-        (a: any, b: any) =>
-          new Date(b.lastTime).getTime() - new Date(a.lastTime).getTime()
+    const formatted = roomsData.map((room: any) => {
+      const roomMsgs = messages?.filter(
+        (m: any) => m.room_id === room.id
       )
 
-      setRooms(formatted)
-    }
+      const lastMsg = roomMsgs?.sort(
+        (a: any, b: any) =>
+          new Date(b.created_at).getTime() -
+          new Date(a.created_at).getTime()
+      )[0]
+
+      return {
+        id: room.id,
+        lastMessage: lastMsg?.content || 'No messages yet',
+        lastTime: lastMsg?.created_at || room.created_at,
+      }
+    })
+
+    formatted.sort(
+      (a: any, b: any) =>
+        new Date(b.lastTime).getTime() -
+        new Date(a.lastTime).getTime()
+    )
+
+    setRooms(formatted)
   }
 
   useEffect(() => {
