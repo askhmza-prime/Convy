@@ -10,16 +10,42 @@ export default function HomePage() {
 
   // 🔥 Fetch rooms with last message
   async function fetchRooms() {
-    const { data, error } = await supabase
-      .from('rooms')
-      .select(`
-        id,
-        created_at,
-        messages (
-          content,
-          created_at
-        )
-      `)
+  const { data: rooms, error } = await supabase
+    .from('rooms')
+    .select('*')
+
+  if (!rooms) return
+
+  const { data: messages } = await supabase
+    .from('messages')
+    .select('*')
+
+  const formatted = rooms.map((room: any) => {
+    const roomMsgs = messages?.filter(
+      (m: any) => m.room_id === room.id
+    )
+
+    const lastMsg = roomMsgs?.sort(
+      (a: any, b: any) =>
+        new Date(b.created_at).getTime() -
+        new Date(a.created_at).getTime()
+    )[0]
+
+    return {
+      id: room.id,
+      lastMessage: lastMsg?.content || 'No messages yet',
+      lastTime: lastMsg?.created_at || room.created_at,
+    }
+  })
+
+  formatted.sort(
+    (a: any, b: any) =>
+      new Date(b.lastTime).getTime() -
+      new Date(a.lastTime).getTime()
+  )
+
+  setRooms(formatted)
+  }
 
     if (!error && data) {
       const formatted = data.map((room: any) => {
