@@ -32,6 +32,7 @@ export default function HomePage() {
 
       return {
         id: room.id,
+        name: room.name,
         lastMessage: lastMsg?.content || 'No messages yet',
         lastTime: lastMsg?.created_at || room.created_at,
       }
