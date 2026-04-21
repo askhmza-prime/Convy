@@ -9,14 +9,38 @@ export default function HomePage() {
   const router = useRouter()
 
   async function fetchRooms() {
-    const { data, error } = await supabase
-      .from('rooms')
-      .select('*')
-      .order('created_at', { ascending: false })
+  const { data, error } = await supabase
+    .from('rooms')
+    .select(`
+      id,
+      created_at,
+      messages (
+        content,
+        created_at
+      )
+    `)
 
-    if (!error && data) {
-      setRooms(data)
-    }
+  if (!error && data) {
+    const formatted = data.map((room: any) => {
+      const lastMsg = room.messages?.sort(
+        (a: any, b: any) =>
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      )[0]
+
+      return {
+        id: room.id,
+        lastMessage: lastMsg?.content || 'No messages yet',
+        lastTime: lastMsg?.created_at || room.created_at,
+      }
+    })
+
+    formatted.sort(
+      (a: any, b: any) =>
+        new Date(b.lastTime).getTime() - new Date(a.lastTime).getTime()
+    )
+
+    setRooms(formatted)
+  }
   }
 
   useEffect(() => {
