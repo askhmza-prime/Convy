@@ -11,28 +11,29 @@ export default function HomePage() {
 
   // 🔥 Ensure username exists
   async function ensureUsername() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
-    if (!user) return
+  if (!user) return
 
-    const { data } = await supabase
-      .from('profiles')
-      .select('username')
-      .eq('id', user.id)
-      .single()
+  const { data } = await supabase
+    .from('profiles')
+    .select('username')
+    .eq('id', user.id)
+    .maybeSingle()
 
-    if (!data) {
-      const username = prompt('Choose your username')
+  // 🔥 FIX: check BOTH cases
+  if (!data || !data.username) {
+    const username = prompt('Choose your username')
 
-      if (!username) return
+    if (!username) return
 
-      await supabase.from('profiles').insert({
-        id: user.id,
-        username,
-      })
-    }
+    await supabase.from('profiles').upsert({
+      id: user.id,
+      username,
+    })
+  }
   }
 
   // 🔥 Fetch usernames
