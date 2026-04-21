@@ -91,23 +91,30 @@ const tempMessage = {
       filter: `room_id=eq.${roomId}`,
     },
     (payload) => {
-      setMessages((prev) => {
-        // 🔥 remove matching temp message
-        const filtered = prev.filter(
-          (msg) =>
-            !(
-              msg.isTemp &&
-              msg.content === payload.new.content &&
-              msg.user_id === payload.new.user_id
-            )
-        )
+  setMessages((prev) => {
+    let foundTemp = false
 
-        // 🔥 prevent duplicate real messages
-        const exists = filtered.some((msg) => msg.id === payload.new.id)
-        if (exists) return filtered
+    const updated = prev.map((msg) => {
+      if (
+        msg.isTemp &&
+        msg.content === payload.new.content &&
+        msg.user_id === payload.new.user_id
+      ) {
+        foundTemp = true
+        return payload.new
+      }
+      return msg
+    })
 
-        return [...filtered, payload.new]
-      })
+    // ✅ if temp found → replace only
+    if (foundTemp) return updated
+
+    // ✅ if no temp → add normally (for receiver)
+    const exists = prev.some((msg) => msg.id === payload.new.id)
+    if (exists) return prev
+
+    return [...prev, payload.new]
+  })
     }
   )
   .subscribe((status) => {
