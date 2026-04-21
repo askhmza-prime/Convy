@@ -6,19 +6,51 @@ import { useRouter } from 'next/navigation'
 
 export default function HomePage() {
   const [rooms, setRooms] = useState<any[]>([])
-  const [userId, setUserId] = useState<string | null>(null)
+  const [userMap, setUserMap] = useState<any>({})
   const router = useRouter()
 
-  // 🔥 Get current user
-  async function getUser() {
+  // 🔥 Ensure username exists
+  async function ensureUsername() {
     const {
       data: { user },
     } = await supabase.auth.getUser()
 
-    setUserId(user?.id || null)
+    if (!user) return
+
+    const { data } = await supabase
+      .from('profiles')
+      .select('username')
+      .eq('id', user.id)
+      .single()
+
+    if (!data) {
+      const username = prompt('Choose your username')
+
+      if (!username) return
+
+      await supabase.from('profiles').insert({
+        id: user.id,
+        username,
+      })
+    }
   }
 
-  // 🔥 Fetch rooms
+  // 🔥 Fetch usernames
+  async function fetchUsers() {
+    const { data } = await supabase
+      .from('profiles')
+      .select('*')
+
+    const map: any = {}
+
+    data?.forEach((user: any) => {
+      map[user.id] = user.username
+    })
+
+    setUserMap(map)
+  }
+
+  // 🔥 Fetch rooms + messages
   async function fetchRooms() {
     const { data: roomsData } = await supabase.from('rooms').select('*')
     const { data: messages } = await supabase.from('messages').select('*')
@@ -34,13 +66,15 @@ export default function HomePage() {
           new Date(a.created_at).getTime()
       )[0]
 
-      const isMe = lastMsg?.user_id === userId
+      const senderName = lastMsg
+        ? userMap[lastMsg.user_id] || 'User'
+        : ''
 
       return {
         id: room.id,
         name: room.name,
         lastMessage: lastMsg
-          ? `${isMe ? 'You' : 'Other'}: ${lastMsg.content}`
+          ? `${senderName}: ${lastMsg.content}`
           : 'No messages yet',
         lastTime: lastMsg?.created_at || room.created_at,
       }
@@ -55,15 +89,17 @@ export default function HomePage() {
     setRooms(formatted)
   }
 
+  // 🔥 Run on load
   useEffect(() => {
-    getUser()
+    ensureUsername()
+    fetchUsers()
   }, [])
 
   useEffect(() => {
-    if (userId !== null) {
+    if (Object.keys(userMap).length > 0) {
       fetchRooms()
     }
-  }, [userId])
+  }, [userMap])
 
   // 🔥 Create room
   async function createRoom() {
@@ -106,6 +142,7 @@ export default function HomePage() {
     router.push(`/room/${input}`)
   }
 
+  // 🔥 Copy invite
   function copyInvite(roomId: string) {
     const link = `${window.location.origin}/room/${roomId}`
     navigator.clipboard.writeText(link)
@@ -115,6 +152,7 @@ export default function HomePage() {
   return (
     <main className="h-screen bg-[#0a0a0a] text-white">
 
+      {/* Header */}
       <div className="p-4 border-b border-white/5 flex justify-between items-center">
         <h1 className="text-xl font-semibold">Chats</h1>
 
@@ -135,6 +173,7 @@ export default function HomePage() {
         </div>
       </div>
 
+      {/* Chat List */}
       <div className="flex flex-col">
         {rooms.map((room) => {
           const time = new Date(room.lastTime).toLocaleTimeString('en-IN', {
