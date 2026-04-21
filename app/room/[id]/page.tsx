@@ -100,6 +100,12 @@ export default function RoomPage() {
           const isMe = msg.user_id === userId
           const username = userMap[msg.user_id] || 'Unknown'
 
+          // ✅ FIXED TIME (LOCAL DEVICE TIME)
+          const time = new Date(msg.created_at).toLocaleTimeString('en-IN', {
+            hour: '2-digit',
+            minute: '2-digit',
+          })
+
           return (
             <div
               key={msg.id}
@@ -109,10 +115,15 @@ export default function RoomPage() {
                   : 'bg-[#111] self-start'
               }`}
             >
-              {/* 👤 Username */}
-              <p className="text-[10px] opacity-60 mb-1">
-                {isMe ? 'You' : username}
-              </p>
+              {/* 👤 Username + Time */}
+              <div className="flex justify-between items-center mb-1">
+                <p className="text-[10px] opacity-60">
+                  {isMe ? 'You' : username}
+                </p>
+                <p className="text-[10px] opacity-40">
+                  {time}
+                </p>
+              </div>
 
               {/* 💬 Message */}
               <p className="text-sm">{msg.content}</p>
