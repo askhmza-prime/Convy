@@ -73,7 +73,9 @@ export default function HomePage() {
               className="flex items-center justify-between px-4 py-3 border-b border-white/5 bg-[#111] cursor-pointer active:scale-[0.98]"
             >
               <div className="flex flex-col">
-                <p className="text-sm font-semibold">Room</p>
+                <p className="text-sm font-semibold">
+  {room.name || 'Room'}
+</p>
                 <p className="text-xs text-gray-400 truncate max-w-[220px]">
                   {room.lastMessage}
                 </p>
