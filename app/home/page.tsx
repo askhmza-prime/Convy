@@ -8,7 +8,7 @@ export default function HomePage() {
   const [rooms, setRooms] = useState<any[]>([])
   const router = useRouter()
 
-  // 🔥 Fetch rooms + last messages
+  // 🔥 Fetch rooms + last message
   async function fetchRooms() {
     const { data: roomsData } = await supabase
       .from('rooms')
@@ -48,7 +48,11 @@ export default function HomePage() {
     setRooms(formatted)
   }
 
-  // 🔥 Create room
+  useEffect(() => {
+    fetchRooms()
+  }, [])
+
+  // 🔥 Create new room
   async function createRoom() {
     const roomName = prompt('Enter room name')
 
@@ -64,10 +68,6 @@ export default function HomePage() {
       router.push(`/room/${data.id}`)
     }
   }
-
-  useEffect(() => {
-    fetchRooms()
-  }, [])
 
   return (
     <main className="h-screen bg-[#0a0a0a] text-white">
@@ -102,7 +102,6 @@ export default function HomePage() {
                 <p className="text-sm font-semibold">
                   {room.name || 'Room'}
                 </p>
-
                 <p className="text-xs text-gray-400 truncate max-w-[220px]">
                   {room.lastMessage}
                 </p>
