@@ -11,6 +11,7 @@ export default function RoomPage() {
   const [input, setInput] = useState('')
   const [userId, setUserId] = useState<string | null>(null)
   const [userMap, setUserMap] = useState<any>({})
+  const [members, setMembers] = useState<string[]>([])
 
   // 🔐 Get current user
   async function getUser() {
@@ -21,7 +22,7 @@ export default function RoomPage() {
     if (user) setUserId(user.id)
   }
 
-  // 🔥 JOIN ROOM (IMPORTANT)
+  // 🔥 Join room
   async function joinRoom(userId: string) {
     await supabase.from('room_members').upsert({
       room_id: id,
@@ -29,18 +30,7 @@ export default function RoomPage() {
     })
   }
 
-  // 🔥 Fetch messages
-  async function fetchMessages() {
-    const { data } = await supabase
-      .from('messages')
-      .select('*')
-      .eq('room_id', id)
-      .order('created_at', { ascending: true })
-
-    if (data) setMessages(data)
-  }
-
-  // 🔥 Fetch usernames
+  // 🔥 Fetch users (username map)
   async function fetchUsers() {
     const { data } = await supabase
       .from('profiles')
@@ -52,6 +42,31 @@ export default function RoomPage() {
     })
 
     setUserMap(map)
+    return map
+  }
+
+  // 🔥 Fetch members of this room
+  async function fetchMembers(map: any) {
+    const { data } = await supabase
+      .from('room_members')
+      .select('user_id')
+      .eq('room_id', id)
+
+    if (!data) return
+
+    const names = data.map((m: any) => map[m.user_id] || 'User')
+    setMembers(names)
+  }
+
+  // 🔥 Fetch messages
+  async function fetchMessages() {
+    const { data } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('room_id', id)
+      .order('created_at', { ascending: true })
+
+    if (data) setMessages(data)
   }
 
   // 🔥 Send message
@@ -77,11 +92,13 @@ export default function RoomPage() {
 
       setUserId(user.id)
 
-      // 🔥 AUTO JOIN ROOM
+      // join room
       await joinRoom(user.id)
 
-      fetchMessages()
-      fetchUsers()
+      // fetch everything
+      const map = await fetchUsers()
+      await fetchMembers(map)
+      await fetchMessages()
     }
 
     init()
@@ -111,6 +128,11 @@ export default function RoomPage() {
       {/* Header */}
       <div className="p-4 border-b border-white/5">
         <h1 className="text-lg font-semibold">Room</h1>
+
+        {/* 👥 Members */}
+        <p className="text-xs text-gray-400 mt-1 truncate">
+          {members.join(', ')}
+        </p>
       </div>
 
       {/* Messages */}
