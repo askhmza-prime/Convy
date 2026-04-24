@@ -12,35 +12,21 @@ export default function RoomPage() {
   const [userId, setUserId] = useState<string | null>(null)
   const [userMap, setUserMap] = useState<any>({})
   const [members, setMembers] = useState<string[]>([])
+  const [memberIds, setMemberIds] = useState<string[]>([])
   const [typingUser, setTypingUser] = useState<string | null>(null)
   const [onlineUsers, setOnlineUsers] = useState<string[]>([])
-  const [lastSeenMap, setLastSeenMap] = useState<any>({})
 
   const channelRef = useRef<any>(null)
-
-  // 🔐 Get user
-  async function getUser() {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (user) setUserId(user.id)
-  }
-
-  // 🔥 Join room
-  async function joinRoom(userId: string) {
-    await supabase.from('room_members').upsert({
-      room_id: id,
-      user_id: userId,
-    })
-  }
 
   // 🔥 Fetch users
   async function fetchUsers() {
     const { data } = await supabase
       .from('profiles')
-      .select('id, username')
+      .select('id, username, last_seen')
 
     const map: any = {}
     data?.forEach((u: any) => {
-      map[u.id] = u.username
+      map[u.id] = u
     })
 
     setUserMap(map)
@@ -54,8 +40,11 @@ export default function RoomPage() {
       .select('user_id')
       .eq('room_id', id)
 
-    const names = data?.map((m: any) => map[m.user_id] || 'User')
-    setMembers(names || [])
+    const ids = data?.map((m: any) => m.user_id) || []
+    setMemberIds(ids)
+
+    const names = ids.map((uid) => map[uid]?.username || 'User')
+    setMembers(names)
   }
 
   // 🔥 Fetch messages
@@ -67,6 +56,14 @@ export default function RoomPage() {
       .order('created_at', { ascending: true })
 
     if (data) setMessages(data)
+  }
+
+  // 🔥 Join room
+  async function joinRoom(userId: string) {
+    await supabase.from('room_members').upsert({
+      room_id: id,
+      user_id: userId,
+    })
   }
 
   // 🔥 Send message
@@ -82,7 +79,7 @@ export default function RoomPage() {
     setInput('')
   }
 
-  // 🔥 Typing system (FIXED)
+  // 🔥 Typing
   function handleTyping() {
     if (!channelRef.current || !userId) return
 
@@ -125,11 +122,10 @@ export default function RoomPage() {
       },
     })
 
-    // 🔥 PRESENCE (online users)
+    // 🔥 Presence
     channel.on('presence', { event: 'sync' }, () => {
       const state = channel.presenceState()
-      const users = Object.keys(state)
-      setOnlineUsers(users)
+      setOnlineUsers(Object.keys(state))
     })
 
     // 🔥 Messages realtime
@@ -144,7 +140,7 @@ export default function RoomPage() {
       () => fetchMessages()
     )
 
-    // 🔥 Typing events
+    // 🔥 Typing
     channel.on('broadcast', { event: 'typing' }, (payload: any) => {
       if (payload.payload.user_id !== userId) {
         setTypingUser(payload.payload.user_id)
@@ -159,20 +155,19 @@ export default function RoomPage() {
       if (status === 'SUBSCRIBED' && userId) {
         await channel.track({
           user_id: userId,
-          online_at: new Date().toISOString(),
         })
       }
     })
 
     channelRef.current = channel
 
-    return () => {
+    return async () => {
       if (userId) {
-        // store last seen locally
-        setLastSeenMap((prev: any) => ({
-          ...prev,
-          [userId]: new Date().toISOString(),
-        }))
+        // 🔥 SAVE LAST SEEN
+        await supabase
+          .from('profiles')
+          .update({ last_seen: new Date().toISOString() })
+          .eq('id', userId)
       }
 
       supabase.removeChannel(channel)
@@ -186,19 +181,39 @@ export default function RoomPage() {
       <div className="p-4 border-b border-white/5">
         <h1 className="text-lg font-semibold">Room</h1>
 
-        <p className="text-xs text-gray-400 truncate">
-          {members.join(', ')}
-        </p>
+        {/* 👥 Members with status */}
+        <div className="text-xs mt-1 space-y-1">
+          {memberIds.map((uid) => {
+            const user = userMap[uid]
+            const isOnline = onlineUsers.includes(uid)
 
-        {/* 🟢 Online users */}
-        <p className="text-xs text-green-400 mt-1">
-          {onlineUsers.length} online
-        </p>
+            let status = 'offline'
+
+            if (isOnline) {
+              status = 'online'
+            } else if (user?.last_seen) {
+              const time = new Date(user.last_seen).toLocaleTimeString('en-IN', {
+                hour: '2-digit',
+                minute: '2-digit',
+              })
+              status = `last seen ${time}`
+            }
+
+            return (
+              <p key={uid} className="text-gray-400">
+                {user?.username || 'User'} •{' '}
+                <span className={isOnline ? 'text-green-400' : ''}>
+                  {status}
+                </span>
+              </p>
+            )
+          })}
+        </div>
 
         {/* ✨ Typing */}
         {typingUser && (
-          <p className="text-xs text-yellow-400">
-            {userMap[typingUser] || 'Someone'} is typing...
+          <p className="text-xs text-yellow-400 mt-2">
+            {userMap[typingUser]?.username || 'Someone'} is typing...
           </p>
         )}
       </div>
@@ -207,7 +222,7 @@ export default function RoomPage() {
       <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
         {messages.map((msg) => {
           const isMe = msg.user_id === userId
-          const username = userMap[msg.user_id] || 'User'
+          const username = userMap[msg.user_id]?.username || 'User'
 
           const time = new Date(msg.created_at).toLocaleTimeString('en-IN', {
             hour: '2-digit',
