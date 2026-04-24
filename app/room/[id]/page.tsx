@@ -13,9 +13,10 @@ export default function RoomPage() {
   const [userMap, setUserMap] = useState<any>({})
   const [members, setMembers] = useState<string[]>([])
   const [typingUser, setTypingUser] = useState<string | null>(null)
+  const [onlineUsers, setOnlineUsers] = useState<string[]>([])
+  const [lastSeenMap, setLastSeenMap] = useState<any>({})
 
   const channelRef = useRef<any>(null)
-  let typingTimeout: any
 
   // 🔐 Get user
   async function getUser() {
@@ -33,7 +34,9 @@ export default function RoomPage() {
 
   // 🔥 Fetch users
   async function fetchUsers() {
-    const { data } = await supabase.from('profiles').select('id, username')
+    const { data } = await supabase
+      .from('profiles')
+      .select('id, username')
 
     const map: any = {}
     data?.forEach((u: any) => {
@@ -79,7 +82,7 @@ export default function RoomPage() {
     setInput('')
   }
 
-  // 🔥 Handle typing
+  // 🔥 Typing system (FIXED)
   function handleTyping() {
     if (!channelRef.current || !userId) return
 
@@ -89,10 +92,15 @@ export default function RoomPage() {
       payload: { user_id: userId },
     })
 
-    clearTimeout(typingTimeout)
-    typingTimeout = setTimeout(() => {
-      setTypingUser(null)
-    }, 2000)
+    clearTimeout((window as any).typingTimer)
+
+    ;(window as any).typingTimer = setTimeout(() => {
+      channelRef.current.send({
+        type: 'broadcast',
+        event: 'stop_typing',
+        payload: { user_id: userId },
+      })
+    }, 1500)
   }
 
   useEffect(() => {
@@ -101,6 +109,7 @@ export default function RoomPage() {
       if (!user) return
 
       setUserId(user.id)
+
       await joinRoom(user.id)
 
       const map = await fetchUsers()
@@ -110,9 +119,20 @@ export default function RoomPage() {
 
     init()
 
-    const channel = supabase.channel(`room-${id}`)
+    const channel = supabase.channel(`room-${id}`, {
+      config: {
+        presence: { key: userId || '' },
+      },
+    })
 
-    // 🔥 Listen messages
+    // 🔥 PRESENCE (online users)
+    channel.on('presence', { event: 'sync' }, () => {
+      const state = channel.presenceState()
+      const users = Object.keys(state)
+      setOnlineUsers(users)
+    })
+
+    // 🔥 Messages realtime
     channel.on(
       'postgres_changes',
       {
@@ -124,20 +144,40 @@ export default function RoomPage() {
       () => fetchMessages()
     )
 
-    // 🔥 Listen typing
+    // 🔥 Typing events
     channel.on('broadcast', { event: 'typing' }, (payload: any) => {
       if (payload.payload.user_id !== userId) {
         setTypingUser(payload.payload.user_id)
       }
     })
 
-    channel.subscribe()
+    channel.on('broadcast', { event: 'stop_typing' }, () => {
+      setTypingUser(null)
+    })
+
+    channel.subscribe(async (status) => {
+      if (status === 'SUBSCRIBED' && userId) {
+        await channel.track({
+          user_id: userId,
+          online_at: new Date().toISOString(),
+        })
+      }
+    })
+
     channelRef.current = channel
 
     return () => {
+      if (userId) {
+        // store last seen locally
+        setLastSeenMap((prev: any) => ({
+          ...prev,
+          [userId]: new Date().toISOString(),
+        }))
+      }
+
       supabase.removeChannel(channel)
     }
-  }, [])
+  }, [id, userId])
 
   return (
     <main className="h-screen flex flex-col bg-black text-white">
@@ -150,9 +190,14 @@ export default function RoomPage() {
           {members.join(', ')}
         </p>
 
+        {/* 🟢 Online users */}
+        <p className="text-xs text-green-400 mt-1">
+          {onlineUsers.length} online
+        </p>
+
         {/* ✨ Typing */}
         {typingUser && (
-          <p className="text-xs text-green-400 mt-1">
+          <p className="text-xs text-yellow-400">
             {userMap[typingUser] || 'Someone'} is typing...
           </p>
         )}
