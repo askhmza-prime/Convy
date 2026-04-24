@@ -21,6 +21,14 @@ export default function RoomPage() {
     if (user) setUserId(user.id)
   }
 
+  // 🔥 JOIN ROOM (IMPORTANT)
+  async function joinRoom(userId: string) {
+    await supabase.from('room_members').upsert({
+      room_id: id,
+      user_id: userId,
+    })
+  }
+
   // 🔥 Fetch messages
   async function fetchMessages() {
     const { data } = await supabase
@@ -38,10 +46,8 @@ export default function RoomPage() {
       .from('profiles')
       .select('id, username')
 
-    if (!data) return
-
     const map: any = {}
-    data.forEach((u: any) => {
+    data?.forEach((u: any) => {
       map[u.id] = u.username
     })
 
@@ -50,7 +56,7 @@ export default function RoomPage() {
 
   // 🔥 Send message
   async function sendMessage() {
-    if (!input.trim()) return
+    if (!input.trim() || !userId) return
 
     await supabase.from('messages').insert({
       room_id: id,
@@ -59,16 +65,29 @@ export default function RoomPage() {
     })
 
     setInput('')
-    fetchMessages()
   }
 
   useEffect(() => {
-    getUser()
-    fetchMessages()
-    fetchUsers()
+    async function init() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user) return
+
+      setUserId(user.id)
+
+      // 🔥 AUTO JOIN ROOM
+      await joinRoom(user.id)
+
+      fetchMessages()
+      fetchUsers()
+    }
+
+    init()
 
     const channel = supabase
-      .channel('realtime-room')
+      .channel('room-realtime')
       .on(
         'postgres_changes',
         {
@@ -98,9 +117,8 @@ export default function RoomPage() {
       <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
         {messages.map((msg) => {
           const isMe = msg.user_id === userId
-          const username = userMap[msg.user_id] || 'Unknown'
+          const username = userMap[msg.user_id] || 'User'
 
-          // ✅ FIXED TIME (LOCAL DEVICE TIME)
           const time = new Date(msg.created_at).toLocaleTimeString('en-IN', {
             hour: '2-digit',
             minute: '2-digit',
@@ -115,17 +133,11 @@ export default function RoomPage() {
                   : 'bg-[#111] self-start'
               }`}
             >
-              {/* 👤 Username + Time */}
-              <div className="flex justify-between items-center mb-1">
-                <p className="text-[10px] opacity-60">
-                  {isMe ? 'You' : username}
-                </p>
-                <p className="text-[10px] opacity-40">
-                  {time}
-                </p>
+              <div className="flex justify-between text-[10px] opacity-60 mb-1">
+                <span>{isMe ? 'You' : username}</span>
+                <span>{time}</span>
               </div>
 
-              {/* 💬 Message */}
               <p className="text-sm">{msg.content}</p>
             </div>
           )
@@ -137,8 +149,8 @@ export default function RoomPage() {
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Type message..."
           className="flex-1 bg-[#111] p-2 rounded outline-none"
+          placeholder="Type message..."
         />
 
         <button
@@ -151,4 +163,4 @@ export default function RoomPage() {
 
     </main>
   )
-}
+        }
