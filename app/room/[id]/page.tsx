@@ -11,7 +11,6 @@ export default function RoomPage() {
   const [input, setInput] = useState('')
   const [userId, setUserId] = useState<string | null>(null)
   const [userMap, setUserMap] = useState<any>({})
-  const [members, setMembers] = useState<string[]>([])
   const [memberIds, setMemberIds] = useState<string[]>([])
   const [typingUser, setTypingUser] = useState<string | null>(null)
   const [onlineUsers, setOnlineUsers] = useState<string[]>([])
@@ -42,9 +41,6 @@ export default function RoomPage() {
 
     const ids = data?.map((m: any) => m.user_id) || []
     setMemberIds(ids)
-
-    const names = ids.map((uid) => map[uid]?.username || 'User')
-    setMembers(names)
   }
 
   // 🔥 Fetch messages
@@ -101,6 +97,8 @@ export default function RoomPage() {
   }
 
   useEffect(() => {
+    let channel: any
+
     async function init() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
@@ -112,67 +110,68 @@ export default function RoomPage() {
       const map = await fetchUsers()
       await fetchMembers(map)
       await fetchMessages()
+
+      // 🔥 Create channel AFTER userId exists
+      channel = supabase.channel(`room-${id}`, {
+        config: {
+          presence: { key: user.id },
+        },
+      })
+
+      // Presence
+      channel.on('presence', { event: 'sync' }, () => {
+        const state = channel.presenceState()
+        setOnlineUsers(Object.keys(state))
+      })
+
+      // Messages realtime
+      channel.on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'messages',
+          filter: `room_id=eq.${id}`,
+        },
+        () => fetchMessages()
+      )
+
+      // Typing
+      channel.on('broadcast', { event: 'typing' }, (payload: any) => {
+        if (payload.payload.user_id !== user.id) {
+          setTypingUser(payload.payload.user_id)
+        }
+      })
+
+      channel.on('broadcast', { event: 'stop_typing' }, () => {
+        setTypingUser(null)
+      })
+
+      channel.subscribe(async (status: string) => {
+        if (status === 'SUBSCRIBED') {
+          await channel.track({ user_id: user.id })
+        }
+      })
+
+      channelRef.current = channel
     }
 
     init()
 
-    const channel = supabase.channel(`room-${id}`, {
-      config: {
-        presence: { key: userId || '' },
-      },
-    })
-
-    // 🔥 Presence
-    channel.on('presence', { event: 'sync' }, () => {
-      const state = channel.presenceState()
-      setOnlineUsers(Object.keys(state))
-    })
-
-    // 🔥 Messages realtime
-    channel.on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'messages',
-        filter: `room_id=eq.${id}`,
-      },
-      () => fetchMessages()
-    )
-
-    // 🔥 Typing
-    channel.on('broadcast', { event: 'typing' }, (payload: any) => {
-      if (payload.payload.user_id !== userId) {
-        setTypingUser(payload.payload.user_id)
-      }
-    })
-
-    channel.on('broadcast', { event: 'stop_typing' }, () => {
-      setTypingUser(null)
-    })
-
-    channel.subscribe(async (status) => {
-      if (status === 'SUBSCRIBED' && userId) {
-        await channel.track({
-          user_id: userId,
-        })
-      }
-    })
-
-    channelRef.current = channel
-
-    return async () => {
+    // ✅ FIXED CLEANUP (NOT async)
+    return () => {
       if (userId) {
-        // 🔥 SAVE LAST SEEN
-        await supabase
+        supabase
           .from('profiles')
           .update({ last_seen: new Date().toISOString() })
           .eq('id', userId)
       }
 
-      supabase.removeChannel(channel)
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current)
+      }
     }
-  }, [id, userId])
+  }, [id])
 
   return (
     <main className="h-screen flex flex-col bg-black text-white">
@@ -181,7 +180,7 @@ export default function RoomPage() {
       <div className="p-4 border-b border-white/5">
         <h1 className="text-lg font-semibold">Room</h1>
 
-        {/* 👥 Members with status */}
+        {/* Members with status */}
         <div className="text-xs mt-1 space-y-1">
           {memberIds.map((uid) => {
             const user = userMap[uid]
@@ -210,7 +209,7 @@ export default function RoomPage() {
           })}
         </div>
 
-        {/* ✨ Typing */}
+        {/* Typing */}
         {typingUser && (
           <p className="text-xs text-yellow-400 mt-2">
             {userMap[typingUser]?.username || 'Someone'} is typing...
