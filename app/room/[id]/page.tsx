@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
@@ -12,13 +12,14 @@ export default function RoomPage() {
   const [userId, setUserId] = useState<string | null>(null)
   const [userMap, setUserMap] = useState<any>({})
   const [members, setMembers] = useState<string[]>([])
+  const [typingUser, setTypingUser] = useState<string | null>(null)
 
-  // 🔐 Get current user
+  const channelRef = useRef<any>(null)
+  let typingTimeout: any
+
+  // 🔐 Get user
   async function getUser() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
+    const { data: { user } } = await supabase.auth.getUser()
     if (user) setUserId(user.id)
   }
 
@@ -30,11 +31,9 @@ export default function RoomPage() {
     })
   }
 
-  // 🔥 Fetch users (username map)
+  // 🔥 Fetch users
   async function fetchUsers() {
-    const { data } = await supabase
-      .from('profiles')
-      .select('id, username')
+    const { data } = await supabase.from('profiles').select('id, username')
 
     const map: any = {}
     data?.forEach((u: any) => {
@@ -45,17 +44,15 @@ export default function RoomPage() {
     return map
   }
 
-  // 🔥 Fetch members of this room
+  // 🔥 Fetch members
   async function fetchMembers(map: any) {
     const { data } = await supabase
       .from('room_members')
       .select('user_id')
       .eq('room_id', id)
 
-    if (!data) return
-
-    const names = data.map((m: any) => map[m.user_id] || 'User')
-    setMembers(names)
+    const names = data?.map((m: any) => map[m.user_id] || 'User')
+    setMembers(names || [])
   }
 
   // 🔥 Fetch messages
@@ -82,20 +79,30 @@ export default function RoomPage() {
     setInput('')
   }
 
+  // 🔥 Handle typing
+  function handleTyping() {
+    if (!channelRef.current || !userId) return
+
+    channelRef.current.send({
+      type: 'broadcast',
+      event: 'typing',
+      payload: { user_id: userId },
+    })
+
+    clearTimeout(typingTimeout)
+    typingTimeout = setTimeout(() => {
+      setTypingUser(null)
+    }, 2000)
+  }
+
   useEffect(() => {
     async function init() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-
+      const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
       setUserId(user.id)
-
-      // join room
       await joinRoom(user.id)
 
-      // fetch everything
       const map = await fetchUsers()
       await fetchMembers(map)
       await fetchMessages()
@@ -103,19 +110,29 @@ export default function RoomPage() {
 
     init()
 
-    const channel = supabase
-      .channel('room-realtime')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'messages',
-          filter: `room_id=eq.${id}`,
-        },
-        () => fetchMessages()
-      )
-      .subscribe()
+    const channel = supabase.channel(`room-${id}`)
+
+    // 🔥 Listen messages
+    channel.on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'messages',
+        filter: `room_id=eq.${id}`,
+      },
+      () => fetchMessages()
+    )
+
+    // 🔥 Listen typing
+    channel.on('broadcast', { event: 'typing' }, (payload: any) => {
+      if (payload.payload.user_id !== userId) {
+        setTypingUser(payload.payload.user_id)
+      }
+    })
+
+    channel.subscribe()
+    channelRef.current = channel
 
     return () => {
       supabase.removeChannel(channel)
@@ -129,10 +146,16 @@ export default function RoomPage() {
       <div className="p-4 border-b border-white/5">
         <h1 className="text-lg font-semibold">Room</h1>
 
-        {/* 👥 Members */}
-        <p className="text-xs text-gray-400 mt-1 truncate">
+        <p className="text-xs text-gray-400 truncate">
           {members.join(', ')}
         </p>
+
+        {/* ✨ Typing */}
+        {typingUser && (
+          <p className="text-xs text-green-400 mt-1">
+            {userMap[typingUser] || 'Someone'} is typing...
+          </p>
+        )}
       </div>
 
       {/* Messages */}
@@ -170,7 +193,10 @@ export default function RoomPage() {
       <div className="p-3 border-t border-white/5 flex gap-2">
         <input
           value={input}
-          onChange={(e) => setInput(e.target.value)}
+          onChange={(e) => {
+            setInput(e.target.value)
+            handleTyping()
+          }}
           className="flex-1 bg-[#111] p-2 rounded outline-none"
           placeholder="Type message..."
         />
@@ -185,4 +211,4 @@ export default function RoomPage() {
 
     </main>
   )
-        }
+}
