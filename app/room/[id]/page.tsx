@@ -15,10 +15,13 @@ export default function RoomPage() {
   const [typingUser, setTypingUser] = useState<string | null>(null)
   const [onlineUsers, setOnlineUsers] = useState<string[]>([])
   const [seenMap, setSeenMap] = useState<any>({})
+  
+  // 🔥 NEW (edit state)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editText, setEditText] = useState('')
 
   const channelRef = useRef<any>(null)
 
-  // 🔥 Fetch users
   async function fetchUsers() {
     const { data } = await supabase
       .from('profiles')
@@ -30,10 +33,8 @@ export default function RoomPage() {
     })
 
     setUserMap(map)
-    return map
   }
 
-  // 🔥 Fetch members
   async function fetchMembers() {
     const { data } = await supabase
       .from('room_members')
@@ -43,7 +44,6 @@ export default function RoomPage() {
     setMemberIds(data?.map((m: any) => m.user_id) || [])
   }
 
-  // 🔥 Fetch messages
   async function fetchMessages() {
     const { data } = await supabase
       .from('messages')
@@ -54,7 +54,6 @@ export default function RoomPage() {
     if (data) setMessages(data)
   }
 
-  // 🔥 Fetch seen
   async function fetchSeen() {
     const { data } = await supabase
       .from('message_seen')
@@ -70,7 +69,6 @@ export default function RoomPage() {
     setSeenMap(map)
   }
 
-  // 🔥 Mark seen
   async function markMessagesSeen(userId: string) {
     const { data } = await supabase
       .from('messages')
@@ -87,7 +85,6 @@ export default function RoomPage() {
     await supabase.from('message_seen').upsert(inserts)
   }
 
-  // 🔥 Join room
   async function joinRoom(userId: string) {
     await supabase.from('room_members').upsert({
       room_id: id,
@@ -95,7 +92,6 @@ export default function RoomPage() {
     })
   }
 
-  // 🔥 Send message
   async function sendMessage() {
     if (!input.trim() || !userId) return
 
@@ -108,7 +104,26 @@ export default function RoomPage() {
     setInput('')
   }
 
-  // 🔥 Typing
+  // 🔥 EDIT START
+  function startEdit(msg: any) {
+    if (msg.user_id !== userId) return
+    setEditingId(msg.id)
+    setEditText(msg.content)
+  }
+
+  async function saveEdit() {
+    if (!editingId) return
+
+    await supabase
+      .from('messages')
+      .update({ content: editText })
+      .eq('id', editingId)
+
+    setEditingId(null)
+    setEditText('')
+  }
+  // 🔥 EDIT END
+
   function handleTyping() {
     if (!channelRef.current || !userId) return
 
@@ -117,16 +132,6 @@ export default function RoomPage() {
       event: 'typing',
       payload: { user_id: userId },
     })
-
-    clearTimeout((window as any).typingTimer)
-
-    ;(window as any).typingTimer = setTimeout(() => {
-      channelRef.current.send({
-        type: 'broadcast',
-        event: 'stop_typing',
-        payload: { user_id: userId },
-      })
-    }, 1500)
   }
 
   useEffect(() => {
@@ -149,13 +154,11 @@ export default function RoomPage() {
         config: { presence: { key: user.id } },
       })
 
-      // Presence
       channel.on('presence', { event: 'sync' }, () => {
         const state = channel.presenceState()
         setOnlineUsers(Object.keys(state))
       })
 
-      // Messages realtime
       channel.on(
         'postgres_changes',
         {
@@ -170,7 +173,6 @@ export default function RoomPage() {
         }
       )
 
-      // Typing
       channel.on('broadcast', { event: 'typing' }, (payload: any) => {
         if (payload.payload.user_id !== user.id) {
           setTypingUser(payload.payload.user_id)
@@ -218,23 +220,11 @@ export default function RoomPage() {
             const user = userMap[uid]
             const isOnline = onlineUsers.includes(uid)
 
-            let status = 'offline'
-
-            if (isOnline) {
-              status = 'online'
-            } else if (user?.last_seen) {
-              const time = new Date(user.last_seen).toLocaleTimeString('en-IN', {
-                hour: '2-digit',
-                minute: '2-digit',
-              })
-              status = `last seen ${time}`
-            }
-
             return (
               <p key={uid}>
                 {user?.username || 'User'} •{' '}
                 <span className={isOnline ? 'text-green-400' : ''}>
-                  {status}
+                  {isOnline ? 'online' : 'offline'}
                 </span>
               </p>
             )
@@ -253,31 +243,42 @@ export default function RoomPage() {
         {messages.map((msg) => {
           const isMe = msg.user_id === userId
           const username = userMap[msg.user_id]?.username || 'User'
-
-          const time = new Date(msg.created_at).toLocaleTimeString('en-IN', {
-            hour: '2-digit',
-            minute: '2-digit',
-          })
-
           const seenUsers = seenMap[msg.id] || []
 
           return (
             <div
               key={msg.id}
+              onClick={() => startEdit(msg)}
               className={`max-w-[70%] p-3 rounded ${
-                isMe ? 'bg-white text-black self-end' : 'bg-[#111] self-start'
+                isMe ? 'bg-white text-black self-end' : 'bg-[#111]'
               }`}
             >
-              <div className="flex justify-between text-[10px] opacity-60 mb-1">
-                <span>{isMe ? 'You' : username}</span>
-                <span>{time}</span>
+              <div className="text-[10px] opacity-60 mb-1">
+                {isMe ? 'You' : username}
               </div>
 
-              <p className="text-sm">{msg.content}</p>
+              {/* EDIT MODE */}
+              {editingId === msg.id ? (
+                <div className="flex gap-2">
+                  <input
+                    value={editText}
+                    onChange={(e) => setEditText(e.target.value)}
+                    className="bg-gray-200 text-black px-2 py-1 rounded flex-1"
+                  />
+                  <button
+                    onClick={saveEdit}
+                    className="text-xs bg-black text-white px-2 rounded"
+                  >
+                    Save
+                  </button>
+                </div>
+              ) : (
+                <p>{msg.content}</p>
+              )}
 
-              {/* Seen status */}
+              {/* Seen */}
               {isMe && (
-                <p className="text-[10px] opacity-50 mt-1">
+                <p className="text-[10px] mt-1 opacity-50">
                   {seenUsers.length > 1 ? 'Seen' : 'Sent'}
                 </p>
               )}
