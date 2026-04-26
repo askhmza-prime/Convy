@@ -14,6 +14,7 @@ export default function RoomPage() {
   const [memberIds, setMemberIds] = useState<string[]>([])
   const [typingUser, setTypingUser] = useState<string | null>(null)
   const [onlineUsers, setOnlineUsers] = useState<string[]>([])
+  const [seenMap, setSeenMap] = useState<any>({})
 
   const channelRef = useRef<any>(null)
 
@@ -33,14 +34,13 @@ export default function RoomPage() {
   }
 
   // 🔥 Fetch members
-  async function fetchMembers(map: any) {
+  async function fetchMembers() {
     const { data } = await supabase
       .from('room_members')
       .select('user_id')
       .eq('room_id', id)
 
-    const ids = data?.map((m: any) => m.user_id) || []
-    setMemberIds(ids)
+    setMemberIds(data?.map((m: any) => m.user_id) || [])
   }
 
   // 🔥 Fetch messages
@@ -52,6 +52,39 @@ export default function RoomPage() {
       .order('created_at', { ascending: true })
 
     if (data) setMessages(data)
+  }
+
+  // 🔥 Fetch seen
+  async function fetchSeen() {
+    const { data } = await supabase
+      .from('message_seen')
+      .select('*')
+
+    const map: any = {}
+
+    data?.forEach((s: any) => {
+      if (!map[s.message_id]) map[s.message_id] = []
+      map[s.message_id].push(s.user_id)
+    })
+
+    setSeenMap(map)
+  }
+
+  // 🔥 Mark seen
+  async function markMessagesSeen(userId: string) {
+    const { data } = await supabase
+      .from('messages')
+      .select('id')
+      .eq('room_id', id)
+
+    if (!data) return
+
+    const inserts = data.map((m: any) => ({
+      message_id: m.id,
+      user_id: userId,
+    }))
+
+    await supabase.from('message_seen').upsert(inserts)
   }
 
   // 🔥 Join room
@@ -106,16 +139,14 @@ export default function RoomPage() {
       setUserId(user.id)
 
       await joinRoom(user.id)
-
-      const map = await fetchUsers()
-      await fetchMembers(map)
+      await fetchUsers()
+      await fetchMembers()
       await fetchMessages()
+      await markMessagesSeen(user.id)
+      await fetchSeen()
 
-      // 🔥 Create channel AFTER userId exists
       channel = supabase.channel(`room-${id}`, {
-        config: {
-          presence: { key: user.id },
-        },
+        config: { presence: { key: user.id } },
       })
 
       // Presence
@@ -133,7 +164,10 @@ export default function RoomPage() {
           table: 'messages',
           filter: `room_id=eq.${id}`,
         },
-        () => fetchMessages()
+        async () => {
+          await fetchMessages()
+          await fetchSeen()
+        }
       )
 
       // Typing
@@ -158,7 +192,6 @@ export default function RoomPage() {
 
     init()
 
-    // ✅ FIXED CLEANUP (NOT async)
     return () => {
       if (userId) {
         supabase
@@ -180,7 +213,6 @@ export default function RoomPage() {
       <div className="p-4 border-b border-white/5">
         <h1 className="text-lg font-semibold">Room</h1>
 
-        {/* Members with status */}
         <div className="text-xs mt-1 space-y-1">
           {memberIds.map((uid) => {
             const user = userMap[uid]
@@ -199,7 +231,7 @@ export default function RoomPage() {
             }
 
             return (
-              <p key={uid} className="text-gray-400">
+              <p key={uid}>
                 {user?.username || 'User'} •{' '}
                 <span className={isOnline ? 'text-green-400' : ''}>
                   {status}
@@ -209,7 +241,6 @@ export default function RoomPage() {
           })}
         </div>
 
-        {/* Typing */}
         {typingUser && (
           <p className="text-xs text-yellow-400 mt-2">
             {userMap[typingUser]?.username || 'Someone'} is typing...
@@ -228,13 +259,13 @@ export default function RoomPage() {
             minute: '2-digit',
           })
 
+          const seenUsers = seenMap[msg.id] || []
+
           return (
             <div
               key={msg.id}
               className={`max-w-[70%] p-3 rounded ${
-                isMe
-                  ? 'bg-white text-black self-end'
-                  : 'bg-[#111] self-start'
+                isMe ? 'bg-white text-black self-end' : 'bg-[#111] self-start'
               }`}
             >
               <div className="flex justify-between text-[10px] opacity-60 mb-1">
@@ -243,6 +274,13 @@ export default function RoomPage() {
               </div>
 
               <p className="text-sm">{msg.content}</p>
+
+              {/* Seen status */}
+              {isMe && (
+                <p className="text-[10px] opacity-50 mt-1">
+                  {seenUsers.length > 1 ? 'Seen' : 'Sent'}
+                </p>
+              )}
             </div>
           )
         })}
