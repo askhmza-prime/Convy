@@ -18,7 +18,6 @@ export default function RoomPage() {
 
   const channelRef = useRef<any>(null)
 
-  // 🔥 Fetch users
   async function fetchUsers() {
     const { data } = await supabase
       .from('profiles')
@@ -30,10 +29,8 @@ export default function RoomPage() {
     })
 
     setUserMap(map)
-    return map
   }
 
-  // 🔥 Fetch members
   async function fetchMembers() {
     const { data } = await supabase
       .from('room_members')
@@ -43,7 +40,6 @@ export default function RoomPage() {
     setMemberIds(data?.map((m: any) => m.user_id) || [])
   }
 
-  // 🔥 Fetch messages
   async function fetchMessages() {
     const { data } = await supabase
       .from('messages')
@@ -54,7 +50,6 @@ export default function RoomPage() {
     if (data) setMessages(data)
   }
 
-  // 🔥 Fetch seen
   async function fetchSeen() {
     const { data } = await supabase
       .from('message_seen')
@@ -70,7 +65,6 @@ export default function RoomPage() {
     setSeenMap(map)
   }
 
-  // 🔥 Mark seen
   async function markMessagesSeen(userId: string) {
     const { data } = await supabase
       .from('messages')
@@ -87,7 +81,6 @@ export default function RoomPage() {
     await supabase.from('message_seen').upsert(inserts)
   }
 
-  // 🔥 Join room
   async function joinRoom(userId: string) {
     await supabase.from('room_members').upsert({
       room_id: id,
@@ -95,7 +88,6 @@ export default function RoomPage() {
     })
   }
 
-  // 🔥 Send message
   async function sendMessage() {
     if (!input.trim() || !userId) return
 
@@ -108,7 +100,16 @@ export default function RoomPage() {
     setInput('')
   }
 
-  // 🔥 Typing
+  // 🔥 DELETE MESSAGE
+  async function deleteMessage(messageId: string, senderId: string) {
+    if (senderId !== userId) {
+      alert('You can only delete your own messages')
+      return
+    }
+
+    await supabase.from('messages').delete().eq('id', messageId)
+  }
+
   function handleTyping() {
     if (!channelRef.current || !userId) return
 
@@ -149,13 +150,11 @@ export default function RoomPage() {
         config: { presence: { key: user.id } },
       })
 
-      // Presence
       channel.on('presence', { event: 'sync' }, () => {
         const state = channel.presenceState()
         setOnlineUsers(Object.keys(state))
       })
 
-      // Messages realtime
       channel.on(
         'postgres_changes',
         {
@@ -170,7 +169,6 @@ export default function RoomPage() {
         }
       )
 
-      // Typing
       channel.on('broadcast', { event: 'typing' }, (payload: any) => {
         if (payload.payload.user_id !== user.id) {
           setTypingUser(payload.payload.user_id)
@@ -218,23 +216,11 @@ export default function RoomPage() {
             const user = userMap[uid]
             const isOnline = onlineUsers.includes(uid)
 
-            let status = 'offline'
-
-            if (isOnline) {
-              status = 'online'
-            } else if (user?.last_seen) {
-              const time = new Date(user.last_seen).toLocaleTimeString('en-IN', {
-                hour: '2-digit',
-                minute: '2-digit',
-              })
-              status = `last seen ${time}`
-            }
-
             return (
               <p key={uid}>
                 {user?.username || 'User'} •{' '}
                 <span className={isOnline ? 'text-green-400' : ''}>
-                  {status}
+                  {isOnline ? 'online' : 'offline'}
                 </span>
               </p>
             )
@@ -264,6 +250,7 @@ export default function RoomPage() {
           return (
             <div
               key={msg.id}
+              onDoubleClick={() => deleteMessage(msg.id, msg.user_id)}
               className={`max-w-[70%] p-3 rounded ${
                 isMe ? 'bg-white text-black self-end' : 'bg-[#111] self-start'
               }`}
@@ -275,7 +262,6 @@ export default function RoomPage() {
 
               <p className="text-sm">{msg.content}</p>
 
-              {/* Seen status */}
               {isMe && (
                 <p className="text-[10px] opacity-50 mt-1">
                   {seenUsers.length > 1 ? 'Seen' : 'Sent'}
