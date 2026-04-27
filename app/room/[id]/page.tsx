@@ -21,10 +21,7 @@ export default function RoomPage() {
   const channelRef = useRef<any>(null)
 
   async function fetchUsers() {
-    const { data } = await supabase
-      .from('profiles')
-      .select('id, username')
-
+    const { data } = await supabase.from('profiles').select('id, username')
     const map: any = {}
     data?.forEach((u: any) => (map[u.id] = u))
     setUserMap(map)
@@ -50,9 +47,7 @@ export default function RoomPage() {
   }
 
   async function fetchSeen() {
-    const { data } = await supabase
-      .from('message_seen')
-      .select('*')
+    const { data } = await supabase.from('message_seen').select('*')
 
     const map: any = {}
     data?.forEach((s: any) => {
@@ -112,7 +107,10 @@ export default function RoomPage() {
       .update({ content: editText })
       .eq('id', editingId)
 
-    if (error) return alert(error.message)
+    if (error) {
+      alert(error.message)
+      return
+    }
 
     setMessages((prev: any[]) =>
       prev.map((m) =>
@@ -126,6 +124,7 @@ export default function RoomPage() {
 
   function handleTyping() {
     if (!channelRef.current || !userId) return
+
     channelRef.current.send({
       type: 'broadcast',
       event: 'typing',
@@ -149,7 +148,14 @@ export default function RoomPage() {
       await markMessagesSeen(user.id)
       await fetchSeen()
 
-      channel = supabase.channel(`room-${id}`)
+      channel = supabase.channel(`room-${id}`, {
+        config: { presence: { key: user.id } },
+      })
+
+      channel.on('presence', { event: 'sync' }, () => {
+        const state = channel.presenceState()
+        setOnlineUsers(Object.keys(state))
+      })
 
       channel.on(
         'postgres_changes',
@@ -165,7 +171,22 @@ export default function RoomPage() {
         }
       )
 
-      channel.subscribe()
+      channel.on('broadcast', { event: 'typing' }, (payload: any) => {
+        if (payload.payload.user_id !== user.id) {
+          setTypingUser(payload.payload.user_id)
+        }
+      })
+
+      channel.on('broadcast', { event: 'stop_typing' }, () => {
+        setTypingUser(null)
+      })
+
+      channel.subscribe(async (status: string) => {
+        if (status === 'SUBSCRIBED') {
+          await channel.track({ user_id: user.id })
+        }
+      })
+
       channelRef.current = channel
     }
 
@@ -181,10 +202,34 @@ export default function RoomPage() {
   return (
     <main className="h-screen flex flex-col bg-black text-white">
 
+      {/* Header */}
       <div className="p-4 border-b border-white/5">
-        <h1 className="text-lg font-semibold">Room</h1>
+        <h1 className="text-lg font-semibold">Chat</h1>
+
+        <div className="text-xs mt-1 space-y-1">
+          {memberIds.map((uid) => {
+            const user = userMap[uid]
+            const isOnline = onlineUsers.includes(uid)
+
+            return (
+              <p key={uid}>
+                {user?.username || 'User'} •{' '}
+                <span className={isOnline ? 'text-green-400' : ''}>
+                  {isOnline ? 'online' : 'offline'}
+                </span>
+              </p>
+            )
+          })}
+        </div>
+
+        {typingUser && (
+          <p className="text-xs text-yellow-400 mt-2">
+            {userMap[typingUser]?.username || 'Someone'} is typing...
+          </p>
+        )}
       </div>
 
+      {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
         {messages.map((msg) => {
           const isMe = msg.user_id === userId
@@ -205,9 +250,9 @@ export default function RoomPage() {
             )
 
             if (someoneSeen) {
-              status = '✓✓ (seen)'
+              status = 'seen'
             } else if (someoneOnline) {
-              status = '✓✓'
+              status = 'delivered'
             }
           }
 
@@ -215,10 +260,13 @@ export default function RoomPage() {
             <div
               key={msg.id}
               onClick={() => startEdit(msg)}
-              className={`max-w-[70%] p-3 rounded ${
-                isMe ? 'bg-white text-black self-end' : 'bg-[#111]'
+              className={`max-w-[75%] px-3 py-2 rounded-2xl shadow ${
+                isMe
+                  ? 'bg-white text-black self-end rounded-br-none'
+                  : 'bg-[#1a1a1a] self-start rounded-bl-none'
               }`}
             >
+              {/* Edit Mode */}
               {editingId === msg.id ? (
                 <div className="flex gap-2">
                   <input
@@ -226,36 +274,45 @@ export default function RoomPage() {
                     onChange={(e) => setEditText(e.target.value)}
                     className="bg-gray-200 text-black px-2 py-1 rounded flex-1"
                   />
-                  <button onClick={saveEdit}>Save</button>
+                  <button
+                    onClick={saveEdit}
+                    className="text-xs bg-black text-white px-2 rounded"
+                  >
+                    Save
+                  </button>
                 </div>
               ) : (
                 <p>{msg.content}</p>
               )}
 
+              {/* Ticks */}
               {isMe && (
-                <p className="text-[10px] mt-1 opacity-60">
-                  {status}
-                </p>
+                <div className="text-[12px] mt-1 text-right">
+                  {status === '✓' && <span className="text-gray-400">✓</span>}
+                  {status === 'delivered' && <span className="text-gray-400">✓✓</span>}
+                  {status === 'seen' && <span className="text-blue-500">✓✓</span>}
+                </div>
               )}
             </div>
           )
         })}
       </div>
 
-      <div className="p-3 border-t border-white/5 flex gap-2">
+      {/* Input */}
+      <div className="p-3 border-t border-white/5 flex gap-2 bg-black sticky bottom-0">
         <input
           value={input}
           onChange={(e) => {
             setInput(e.target.value)
             handleTyping()
           }}
-          className="flex-1 bg-[#111] p-2 rounded outline-none"
+          className="flex-1 bg-[#1a1a1a] px-3 py-2 rounded-full outline-none"
           placeholder="Type message..."
         />
 
         <button
           onClick={sendMessage}
-          className="bg-white text-black px-4 rounded"
+          className="bg-white text-black px-4 rounded-full font-medium"
         >
           Send
         </button>
