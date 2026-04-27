@@ -15,8 +15,6 @@ export default function RoomPage() {
   const [typingUser, setTypingUser] = useState<string | null>(null)
   const [onlineUsers, setOnlineUsers] = useState<string[]>([])
   const [seenMap, setSeenMap] = useState<any>({})
-  
-  // 🔥 NEW (edit state)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editText, setEditText] = useState('')
 
@@ -25,13 +23,10 @@ export default function RoomPage() {
   async function fetchUsers() {
     const { data } = await supabase
       .from('profiles')
-      .select('id, username, last_seen')
+      .select('id, username')
 
     const map: any = {}
-    data?.forEach((u: any) => {
-      map[u.id] = u
-    })
-
+    data?.forEach((u: any) => (map[u.id] = u))
     setUserMap(map)
   }
 
@@ -60,7 +55,6 @@ export default function RoomPage() {
       .select('*')
 
     const map: any = {}
-
     data?.forEach((s: any) => {
       if (!map[s.message_id]) map[s.message_id] = []
       map[s.message_id].push(s.user_id)
@@ -104,7 +98,6 @@ export default function RoomPage() {
     setInput('')
   }
 
-  // 🔥 EDIT START
   function startEdit(msg: any) {
     if (msg.user_id !== userId) return
     setEditingId(msg.id)
@@ -112,38 +105,27 @@ export default function RoomPage() {
   }
 
   async function saveEdit() {
-  if (!editingId) return
+    if (!editingId) return
 
-  console.log('Editing:', editingId, editText)
+    const { error } = await supabase
+      .from('messages')
+      .update({ content: editText })
+      .eq('id', editingId)
 
-  const { data, error } = await supabase
-    .from('messages')
-    .update({ content: editText })
-    .eq('id', editingId)
-    .select()
+    if (error) return alert(error.message)
 
-  console.log('Result:', data, error)
-
-  if (error) {
-    alert('Update failed: ' + error.message)
-    return
-  }
-
-  // 🔥 update local state instantly
-  setMessages((prev: any[]) =>
-    prev.map((m) =>
-      m.id === editingId ? { ...m, content: editText } : m
+    setMessages((prev: any[]) =>
+      prev.map((m) =>
+        m.id === editingId ? { ...m, content: editText } : m
+      )
     )
-  )
 
-  setEditingId(null)
-  setEditText('')
+    setEditingId(null)
+    setEditText('')
   }
-  // 🔥 EDIT END
 
   function handleTyping() {
     if (!channelRef.current || !userId) return
-
     channelRef.current.send({
       type: 'broadcast',
       event: 'typing',
@@ -167,14 +149,7 @@ export default function RoomPage() {
       await markMessagesSeen(user.id)
       await fetchSeen()
 
-      channel = supabase.channel(`room-${id}`, {
-        config: { presence: { key: user.id } },
-      })
-
-      channel.on('presence', { event: 'sync' }, () => {
-        const state = channel.presenceState()
-        setOnlineUsers(Object.keys(state))
-      })
+      channel = supabase.channel(`room-${id}`)
 
       channel.on(
         'postgres_changes',
@@ -190,35 +165,13 @@ export default function RoomPage() {
         }
       )
 
-      channel.on('broadcast', { event: 'typing' }, (payload: any) => {
-        if (payload.payload.user_id !== user.id) {
-          setTypingUser(payload.payload.user_id)
-        }
-      })
-
-      channel.on('broadcast', { event: 'stop_typing' }, () => {
-        setTypingUser(null)
-      })
-
-      channel.subscribe(async (status: string) => {
-        if (status === 'SUBSCRIBED') {
-          await channel.track({ user_id: user.id })
-        }
-      })
-
+      channel.subscribe()
       channelRef.current = channel
     }
 
     init()
 
     return () => {
-      if (userId) {
-        supabase
-          .from('profiles')
-          .update({ last_seen: new Date().toISOString() })
-          .eq('id', userId)
-      }
-
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current)
       }
@@ -228,39 +181,35 @@ export default function RoomPage() {
   return (
     <main className="h-screen flex flex-col bg-black text-white">
 
-      {/* Header */}
       <div className="p-4 border-b border-white/5">
         <h1 className="text-lg font-semibold">Room</h1>
-
-        <div className="text-xs mt-1 space-y-1">
-          {memberIds.map((uid) => {
-            const user = userMap[uid]
-            const isOnline = onlineUsers.includes(uid)
-
-            return (
-              <p key={uid}>
-                {user?.username || 'User'} •{' '}
-                <span className={isOnline ? 'text-green-400' : ''}>
-                  {isOnline ? 'online' : 'offline'}
-                </span>
-              </p>
-            )
-          })}
-        </div>
-
-        {typingUser && (
-          <p className="text-xs text-yellow-400 mt-2">
-            {userMap[typingUser]?.username || 'Someone'} is typing...
-          </p>
-        )}
       </div>
 
-      {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
         {messages.map((msg) => {
           const isMe = msg.user_id === userId
-          const username = userMap[msg.user_id]?.username || 'User'
           const seenUsers = seenMap[msg.id] || []
+
+          // 🔥 TICKS LOGIC
+          let status = '✓'
+
+          if (memberIds.length > 1) {
+            const others = memberIds.filter((id) => id !== userId)
+
+            const someoneOnline = others.some((id) =>
+              onlineUsers.includes(id)
+            )
+
+            const someoneSeen = others.some((id) =>
+              seenUsers.includes(id)
+            )
+
+            if (someoneSeen) {
+              status = '✓✓ (seen)'
+            } else if (someoneOnline) {
+              status = '✓✓'
+            }
+          }
 
           return (
             <div
@@ -270,11 +219,6 @@ export default function RoomPage() {
                 isMe ? 'bg-white text-black self-end' : 'bg-[#111]'
               }`}
             >
-              <div className="text-[10px] opacity-60 mb-1">
-                {isMe ? 'You' : username}
-              </div>
-
-              {/* EDIT MODE */}
               {editingId === msg.id ? (
                 <div className="flex gap-2">
                   <input
@@ -282,21 +226,15 @@ export default function RoomPage() {
                     onChange={(e) => setEditText(e.target.value)}
                     className="bg-gray-200 text-black px-2 py-1 rounded flex-1"
                   />
-                  <button
-                    onClick={saveEdit}
-                    className="text-xs bg-black text-white px-2 rounded"
-                  >
-                    Save
-                  </button>
+                  <button onClick={saveEdit}>Save</button>
                 </div>
               ) : (
                 <p>{msg.content}</p>
               )}
 
-              {/* Seen */}
               {isMe && (
-                <p className="text-[10px] mt-1 opacity-50">
-                  {seenUsers.length > 1 ? 'Seen' : 'Sent'}
+                <p className="text-[10px] mt-1 opacity-60">
+                  {status}
                 </p>
               )}
             </div>
@@ -304,7 +242,6 @@ export default function RoomPage() {
         })}
       </div>
 
-      {/* Input */}
       <div className="p-3 border-t border-white/5 flex gap-2">
         <input
           value={input}
