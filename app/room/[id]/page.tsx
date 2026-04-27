@@ -114,18 +114,27 @@ export default function RoomPage() {
   async function saveEdit() {
   if (!editingId) return
 
-  const { error } = await supabase
+  console.log('Editing:', editingId, editText)
+
+  const { data, error } = await supabase
     .from('messages')
     .update({ content: editText })
     .eq('id', editingId)
+    .select()
+
+  console.log('Result:', data, error)
 
   if (error) {
-    alert('Update failed')
+    alert('Update failed: ' + error.message)
     return
   }
 
-  // 🔥 FORCE REFRESH
-  await fetchMessages()
+  // 🔥 update local state instantly
+  setMessages((prev: any[]) =>
+    prev.map((m) =>
+      m.id === editingId ? { ...m, content: editText } : m
+    )
+  )
 
   setEditingId(null)
   setEditText('')
