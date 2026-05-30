@@ -18,6 +18,7 @@ export default function SignupPage() {
   async function handleSignup() {
   setLoading(true)
   setError('')
+  setSuccess('')
 
   const { error } = await supabase.auth.signUp({
     email,
@@ -27,7 +28,7 @@ export default function SignupPage() {
   if (error) {
     setError(error.message)
   } else {
-    setError(
+    setSuccess(
       '✅ Verification email sent. Please check your inbox and verify your email before logging in.'
     )
   }
@@ -41,9 +42,18 @@ export default function SignupPage() {
         <h2 className="text-2xl font-bold mb-6 text-center">Join Convy</h2>
         {error && <p className="text-red-400 text-sm mb-4">{error}</p>}
         {success && (
-  <p className="text-green-400 text-sm mb-4">
-    {success}
-  </p>
+  <>
+    <p className="text-green-400 text-sm mb-4">
+      {success}
+    </p>
+
+    <button
+      onClick={() => router.push('/login')}
+      className="w-full bg-white text-black py-2 rounded-lg mb-4"
+    >
+      Go to Login
+    </button>
+  </>
 )}
         <input
           type="email"
