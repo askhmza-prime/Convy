@@ -29,42 +29,63 @@ export default function HomePage() {
 
   // 🔥 Fetch rooms
   async function fetchRooms() {
-    const { data: roomsData } = await supabase
-      .from('rooms')
-      .select('*')
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
-    const { data: messages } = await supabase
-      .from('messages')
-      .select('*')
+  if (!user) return
 
-    if (!roomsData) return
+  // Get rooms where current user is a member
+  const { data: memberships } = await supabase
+    .from('room_members')
+    .select('room_id')
+    .eq('user_id', user.id)
 
-    const formatted = roomsData.map((room: any) => {
-      const roomMsgs = messages?.filter(
+  if (!memberships?.length) {
+    setRooms([])
+    return
+  }
+
+  const roomIds = memberships.map((m: any) => m.room_id)
+
+  const { data: roomsData } = await supabase
+    .from('rooms')
+    .select('*')
+    .in('id', roomIds)
+
+  const { data: messages } = await supabase
+    .from('messages')
+    .select('*')
+
+  if (!roomsData) return
+
+  const formatted = roomsData.map((room: any) => {
+    const roomMsgs =
+      messages?.filter(
         (m: any) => m.room_id === room.id
-      )
+      ) || []
 
-      const lastMsg = roomMsgs?.sort(
-        (a: any, b: any) =>
-          new Date(b.created_at).getTime() -
-          new Date(a.created_at).getTime()
-      )[0]
-
-      return {
-        id: room.id,
-        name: room.name,
-        lastMessage: lastMsg?.content || 'No messages yet',
-        lastTime: lastMsg?.created_at || room.created_at,
-      }
-    })
-
-    formatted.sort(
+    const lastMsg = roomMsgs.sort(
       (a: any, b: any) =>
-        new Date(b.lastTime).getTime() -
-        new Date(a.lastTime).getTime()
-    )
+        new Date(b.created_at).getTime() -
+        new Date(a.created_at).getTime()
+    )[0]
 
-    setRooms(formatted)
+    return {
+      id: room.id,
+      name: room.name,
+      lastMessage: lastMsg?.content || 'No messages yet',
+      lastTime: lastMsg?.created_at || room.created_at,
+    }
+  })
+
+  formatted.sort(
+    (a: any, b: any) =>
+      new Date(b.lastTime).getTime() -
+      new Date(a.lastTime).getTime()
+  )
+
+  setRooms(formatted)
   }
 
   useEffect(() => {
