@@ -161,7 +161,19 @@ export default function HomePage() {
 
       {/* Chat List */}
       <div className="flex flex-col">
-        {rooms.map((room) => {
+
+  {rooms.length === 0 ? (
+    <div className="flex flex-col items-center justify-center mt-24 px-6 text-center">
+      <h2 className="text-xl font-semibold mb-2">
+        No chats yet
+      </h2>
+
+      <p className="text-gray-400 text-sm">
+        Create a room or join with an invite link.
+      </p>
+    </div>
+  ) : (
+    rooms.map((room) => {
           const time = new Date(room.lastTime).toLocaleTimeString('en-IN', {
             hour: '2-digit',
             minute: '2-digit',
@@ -200,7 +212,8 @@ export default function HomePage() {
               </div>
             </div>
           )
-        })}
+        })
+      )}
       </div>
 
     </main>
