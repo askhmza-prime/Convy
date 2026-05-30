@@ -15,15 +15,33 @@ export default function LoginPage() {
   const router = useRouter()
 
   async function handleLogin() {
-    setLoading(true)
-    setError('')
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) {
-      setError(error.message)
-    } else {
-      router.push('/home')
-    }
+  setLoading(true)
+  setError('')
+
+  const { error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  })
+
+  if (error) {
+    setError(error.message)
     setLoading(false)
+    return
+  }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user?.email_confirmed_at) {
+    await supabase.auth.signOut()
+    setError('Please verify your email before logging in.')
+    setLoading(false)
+    return
+  }
+
+  router.push('/home')
+  setLoading(false)
   }
 
   return (
