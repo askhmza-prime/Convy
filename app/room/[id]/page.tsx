@@ -266,6 +266,16 @@ export default function RoomPage() {
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
         {messages.map((msg) => {
+      if (msg.type === 'system') {
+  return (
+    <div
+      key={msg.id}
+      className="text-center text-xs text-gray-500 py-2"
+    >
+      {msg.content}
+    </div>
+  )
+      }
           const isMe = msg.user_id === userId
           const seenUsers = seenMap[msg.id] || []
 
