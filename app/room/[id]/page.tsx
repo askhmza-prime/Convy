@@ -243,10 +243,20 @@ const username = profile?.username || 'Someone'
     <main className="h-screen flex flex-col bg-black text-white">
 
       {/* Header */}
-      <div className="p-4 border-b border-white/5">
-        <h1 className="text-lg font-semibold">Chat</h1>
+<div className="p-4 border-b border-white/5">
 
-        <div className="text-xs mt-1 space-y-1">
+  <div className="flex justify-between items-center">
+    <h1 className="text-lg font-semibold">Chat</h1>
+
+    <button
+      onClick={leaveRoom}
+      className="text-red-400 text-xs"
+    >
+      Leave Room
+    </button>
+  </div>
+
+  <div className="text-xs mt-1 space-y-1">
           {memberIds.map((uid) => {
             const user = userMap[uid]
             const isOnline = onlineUsers.includes(uid)
