@@ -37,13 +37,29 @@ export default function RoomPage() {
   }
 
   async function fetchMessages() {
-    const { data } = await supabase
-      .from('messages')
-      .select('*')
-      .eq('room_id', id)
-      .order('created_at', { ascending: true })
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
-    if (data) setMessages(data)
+  if (!user) return
+
+  const { data: member } = await supabase
+    .from('room_members')
+    .select('joined_at')
+    .eq('room_id', id)
+    .eq('user_id', user.id)
+    .single()
+
+  if (!member) return
+
+  const { data } = await supabase
+    .from('messages')
+    .select('*')
+    .eq('room_id', id)
+    .gte('created_at', member.joined_at)
+    .order('created_at', { ascending: true })
+
+  if (data) setMessages(data)
   }
 
   async function fetchSeen() {
