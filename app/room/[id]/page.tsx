@@ -91,10 +91,28 @@ export default function RoomPage() {
   }
 
   async function joinRoom(userId: string) {
-    await supabase.from('room_members').upsert({
-      room_id: id,
-      user_id: userId,
-    })
+  const { data: existing } = await supabase
+    .from('room_members')
+    .select('*')
+    .eq('room_id', id)
+    .eq('user_id', userId)
+    .maybeSingle()
+
+  if (existing) return
+
+  await supabase.from('room_members').insert({
+    room_id: id,
+    user_id: userId,
+  })
+
+  const username = userMap[userId]?.username || 'Someone'
+
+  await supabase.from('messages').insert({
+    room_id: id,
+    content: `${username} joined the room`,
+    user_id: userId,
+    type: 'system',
+  })
   }
 
   async function sendMessage() {
