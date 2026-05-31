@@ -105,7 +105,13 @@ export default function RoomPage() {
     user_id: userId,
   })
 
-  const username = userMap[userId]?.username || 'Someone'
+  const { data: profile } = await supabase
+  .from('profiles')
+  .select('username')
+  .eq('id', userId)
+  .single()
+
+const username = profile?.username || 'Someone'
 
   await supabase.from('messages').insert({
     room_id: id,
