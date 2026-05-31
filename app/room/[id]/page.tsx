@@ -136,11 +136,18 @@ const username = profile?.username || 'Someone'
   async function leaveRoom() {
   if (!userId) return
 
-  await supabase
+  const { error } = await supabase
     .from('room_members')
     .delete()
     .eq('room_id', id)
     .eq('user_id', userId)
+
+  if (error) {
+    alert(error.message)
+    return
+  }
+
+  alert('Deleted successfully')
 
   window.location.href = '/home'
   }
