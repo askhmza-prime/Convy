@@ -133,6 +133,18 @@ const username = profile?.username || 'Someone'
     setInput('')
   }
 
+  async function leaveRoom() {
+  if (!userId) return
+
+  await supabase
+    .from('room_members')
+    .delete()
+    .eq('room_id', id)
+    .eq('user_id', userId)
+
+  window.location.href = '/home'
+  }
+  
   function startEdit(msg: any) {
     if (msg.user_id !== userId) return
     setEditingId(msg.id)
